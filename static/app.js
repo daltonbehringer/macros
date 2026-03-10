@@ -260,6 +260,10 @@ $("#next-day").addEventListener("click", () => shiftDate(1));
 
 // --- Init ---
 
+if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/static/sw.js");
+}
+
 $("#current-date").textContent = formatDateDisplay(state.currentDate);
 loadDay();
 loadSavedMeals();
