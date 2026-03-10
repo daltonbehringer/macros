@@ -49,13 +49,16 @@ async def parse_food(text: str, saved_meals: list[dict]) -> FoodEntry:
     client = anthropic.AsyncAnthropic()
     system = SYSTEM_PROMPT + _build_saved_meals_context(saved_meals)
 
-    response = await client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1024,
-        temperature=0,
-        system=system,
-        messages=[{"role": "user", "content": text}],
-    )
+    try:
+        response = await client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1024,
+            temperature=0,
+            system=system,
+            messages=[{"role": "user", "content": text}],
+        )
+    except anthropic.APIError as e:
+        raise ValueError(f"Claude API error: {e}")
 
     content = response.content[0].text.strip()
     # Strip markdown code fences if present

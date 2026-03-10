@@ -149,8 +149,12 @@ async function logFood() {
         });
 
         if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.detail || "Failed to log food");
+            let msg = "Failed to log food";
+            try {
+                const err = await res.json();
+                msg = err.detail || msg;
+            } catch {}
+            throw new Error(msg);
         }
 
         input.value = "";
@@ -246,7 +250,10 @@ async function loadSavedMeals() {
 
 $("#log-btn").addEventListener("click", logFood);
 $("#food-input").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") logFood();
+    if (e.key === "Enter") {
+        e.preventDefault();
+        logFood();
+    }
 });
 $("#prev-day").addEventListener("click", () => shiftDate(-1));
 $("#next-day").addEventListener("click", () => shiftDate(1));

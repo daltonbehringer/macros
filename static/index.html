@@ -11,9 +11,9 @@
         <header>
             <h1>Macro Tracker</h1>
             <nav class="date-nav">
-                <button id="prev-day">&larr;</button>
+                <button type="button" id="prev-day">&larr;</button>
                 <span id="current-date"></span>
-                <button id="next-day">&rarr;</button>
+                <button type="button" id="next-day">&rarr;</button>
             </nav>
         </header>
 
@@ -58,14 +58,14 @@
 
         <section class="input-section">
             <div class="meal-type-group">
-                <button class="meal-btn active" data-type="breakfast">B</button>
-                <button class="meal-btn" data-type="lunch">L</button>
-                <button class="meal-btn" data-type="dinner">D</button>
-                <button class="meal-btn" data-type="snack">S</button>
+                <button type="button" class="meal-btn active" data-type="breakfast">B</button>
+                <button type="button" class="meal-btn" data-type="lunch">L</button>
+                <button type="button" class="meal-btn" data-type="dinner">D</button>
+                <button type="button" class="meal-btn" data-type="snack">S</button>
             </div>
             <div class="input-area">
                 <input type="text" id="food-input" placeholder="e.g. 200g chicken breast with rice" autocomplete="off">
-                <button id="log-btn">Log</button>
+                <button type="button" id="log-btn">Log</button>
             </div>
             <div id="loading" class="hidden">Analyzing...</div>
             <div id="error" class="hidden"></div>
