@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Macro Tracker</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Macro Tracker</h1>
+            <nav class="date-nav">
+                <button id="prev-day">&larr;</button>
+                <span id="current-date"></span>
+                <button id="next-day">&rarr;</button>
+            </nav>
+        </header>
+
+        <section class="macro-bars">
+            <div class="macro-bar" data-macro="calories">
+                <div class="macro-label">
+                    <span class="macro-name">Calories</span>
+                    <span class="macro-value">0 / 2,305</span>
+                </div>
+                <div class="bar-track">
+                    <div class="bar-fill"></div>
+                </div>
+            </div>
+            <div class="macro-bar" data-macro="protein">
+                <div class="macro-label">
+                    <span class="macro-name">Protein</span>
+                    <span class="macro-value">0 / 190g</span>
+                </div>
+                <div class="bar-track">
+                    <div class="bar-fill"></div>
+                </div>
+            </div>
+            <div class="macro-bar" data-macro="carbs">
+                <div class="macro-label">
+                    <span class="macro-name">Carbs</span>
+                    <span class="macro-value">0 / 240g</span>
+                </div>
+                <div class="bar-track">
+                    <div class="bar-fill"></div>
+                </div>
+            </div>
+            <div class="macro-bar" data-macro="fat">
+                <div class="macro-label">
+                    <span class="macro-name">Fat</span>
+                    <span class="macro-value">0 / 65g</span>
+                </div>
+                <div class="bar-track">
+                    <div class="bar-fill"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="input-section">
+            <div class="meal-type-group">
+                <button class="meal-btn active" data-type="breakfast">B</button>
+                <button class="meal-btn" data-type="lunch">L</button>
+                <button class="meal-btn" data-type="dinner">D</button>
+                <button class="meal-btn" data-type="snack">S</button>
+            </div>
+            <div class="input-area">
+                <input type="text" id="food-input" placeholder="e.g. 200g chicken breast with rice" autocomplete="off">
+                <button id="log-btn">Log</button>
+            </div>
+            <div id="loading" class="hidden">Analyzing...</div>
+            <div id="error" class="hidden"></div>
+        </section>
+
+        <section id="meal-log"></section>
+
+        <section id="saved-meals-section" class="hidden">
+            <h2>Saved Meals</h2>
+            <div id="saved-meals-list"></div>
+        </section>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
