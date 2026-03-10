@@ -135,11 +135,13 @@ async function logFood() {
     const logBtn = $("#log-btn");
     const loading = $("#loading");
     const error = $("#error");
+    const clarify = $("#clarify");
 
     logBtn.disabled = true;
     input.disabled = true;
     loading.classList.remove("hidden");
     error.classList.add("hidden");
+    clarify.classList.add("hidden");
 
     try {
         const res = await fetch("/log", {
@@ -155,6 +157,14 @@ async function logFood() {
                 msg = err.detail || msg;
             } catch {}
             throw new Error(msg);
+        }
+
+        const data = await res.json();
+
+        if (data.status === "clarify") {
+            clarify.textContent = data.message;
+            clarify.classList.remove("hidden");
+            return;
         }
 
         input.value = "";

@@ -8,8 +8,8 @@ from fastapi.staticfiles import StaticFiles
 
 from db import init_db, get_db
 from models import (
-    LogRequest, MealRecord, DayResponse,
-    SaveMealRequest, SavedMeal,
+    LogRequest, FoodEntry, MealRecord, DayResponse,
+    SaveMealRequest, SavedMeal, ClarificationResult,
 )
 from claude_client import parse_food
 
@@ -49,11 +49,20 @@ async def log_food(req: LogRequest):
 
         # Parse food via Claude
         try:
-            entry = await parse_food(req.text, saved_meals)
+            result = await parse_food(req.text, saved_meals)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
+        # If the model needs clarification, return it (not an error)
+        if isinstance(result, ClarificationResult):
+            return {"status": "clarify", "message": result.message}
+
         # Store in DB
+        entry = FoodEntry(
+            food_name=result.food_name, calories=result.calories,
+            protein_g=result.protein_g, carbs_g=result.carbs_g, fat_g=result.fat_g,
+            serving_size_g=result.serving_size_g, notes=result.notes,
+        )
         today = date.today().isoformat()
         cursor = await db.execute(
             """INSERT INTO meals (date, meal_type, food_name, calories, protein_g, carbs_g, fat_g, serving_size_g, notes)

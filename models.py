@@ -17,6 +17,24 @@ class FoodEntry(BaseModel):
     notes: str | None = None
 
 
+class FoodResult(BaseModel):
+    status: Literal["ok"]
+    confidence: float
+    food_name: str
+    calories: float
+    protein_g: float
+    carbs_g: float
+    fat_g: float
+    serving_size_g: float | None = None
+    notes: str | None = None
+
+
+class ClarificationResult(BaseModel):
+    status: Literal["clarify"]
+    confidence: float
+    message: str
+
+
 class MealRecord(FoodEntry):
     id: int
     date: str
