@@ -13,9 +13,28 @@
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <div class="container">
-        <header>
+    <!-- Auth Screen -->
+    <div id="auth-screen" class="hidden">
+        <div class="auth-card">
             <h1>Macro Tracker</h1>
+            <div id="auth-error" class="hidden"></div>
+            <input type="text" id="auth-username" placeholder="Username" autocomplete="username">
+            <input type="password" id="auth-password" placeholder="Password" autocomplete="current-password">
+            <button type="button" id="auth-login-btn">Log In</button>
+            <button type="button" id="auth-register-btn" class="btn-secondary">Create Account</button>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="app" class="container hidden">
+        <header>
+            <div class="header-row">
+                <h1>Macro Tracker</h1>
+                <div class="header-actions">
+                    <button type="button" id="settings-btn" class="icon-btn" title="Settings">&#9881;</button>
+                    <button type="button" id="logout-btn" class="icon-btn" title="Log out">&#8594;</button>
+                </div>
+            </div>
             <nav class="date-nav">
                 <button type="button" id="prev-day">&larr;</button>
                 <span id="current-date"></span>
@@ -27,7 +46,7 @@
             <div class="macro-bar" data-macro="calories">
                 <div class="macro-label">
                     <span class="macro-name">Calories</span>
-                    <span class="macro-value">0 / 2,305</span>
+                    <span class="macro-value">0 / 2,000</span>
                 </div>
                 <div class="bar-track">
                     <div class="bar-fill"></div>
@@ -36,7 +55,7 @@
             <div class="macro-bar" data-macro="protein">
                 <div class="macro-label">
                     <span class="macro-name">Protein</span>
-                    <span class="macro-value">0 / 190g</span>
+                    <span class="macro-value">0 / 150g</span>
                 </div>
                 <div class="bar-track">
                     <div class="bar-fill"></div>
@@ -45,7 +64,7 @@
             <div class="macro-bar" data-macro="carbs">
                 <div class="macro-label">
                     <span class="macro-name">Carbs</span>
-                    <span class="macro-value">0 / 240g</span>
+                    <span class="macro-value">0 / 250g</span>
                 </div>
                 <div class="bar-track">
                     <div class="bar-fill"></div>
@@ -72,6 +91,7 @@
             <div class="input-area">
                 <input type="text" id="food-input" placeholder="e.g. 200g chicken breast with rice" autocomplete="off">
                 <button type="button" id="log-btn">Log</button>
+                <button type="button" id="save-template-btn" class="btn-secondary" title="Save as template">Save</button>
             </div>
             <div id="loading" class="hidden">Analyzing...</div>
             <div id="error" class="hidden"></div>
@@ -84,6 +104,21 @@
             <h2>Saved Meals</h2>
             <div id="saved-meals-list"></div>
         </section>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-overlay" class="hidden">
+        <div class="settings-modal">
+            <h2>Daily Targets</h2>
+            <label>Calories<input type="number" id="set-calories"></label>
+            <label>Protein (g)<input type="number" id="set-protein"></label>
+            <label>Carbs (g)<input type="number" id="set-carbs"></label>
+            <label>Fat (g)<input type="number" id="set-fat"></label>
+            <div class="settings-actions">
+                <button type="button" id="settings-save-btn">Save</button>
+                <button type="button" id="settings-cancel-btn" class="btn-secondary">Cancel</button>
+            </div>
+        </div>
     </div>
 
     <script src="/static/app.js"></script>

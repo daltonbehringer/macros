@@ -31,6 +31,81 @@ body {
     padding: 16px;
 }
 
+/* Auth Screen */
+#auth-screen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 16px;
+}
+
+.auth-card {
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 32px 24px;
+    width: 100%;
+    max-width: 360px;
+    text-align: center;
+}
+
+.auth-card h1 {
+    font-size: 1.5rem;
+    margin-bottom: 24px;
+}
+
+.auth-card input {
+    width: 100%;
+    padding: 10px 14px;
+    border: 2px solid var(--surface2);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.95rem;
+    border-radius: var(--radius);
+    outline: none;
+    margin-bottom: 12px;
+}
+
+.auth-card input:focus {
+    border-color: var(--protein-color);
+}
+
+.auth-card button {
+    width: 100%;
+    padding: 10px;
+    border: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border-radius: var(--radius);
+    cursor: pointer;
+    margin-bottom: 8px;
+}
+
+#auth-login-btn {
+    background: var(--protein-color);
+    color: #fff;
+}
+
+#auth-login-btn:hover {
+    background: #2980b9;
+}
+
+#auth-error {
+    color: var(--danger);
+    font-size: 0.85rem;
+    margin-bottom: 12px;
+}
+
+.btn-secondary {
+    background: var(--surface2) !important;
+    color: var(--text) !important;
+}
+
+.btn-secondary:hover {
+    background: #1a4a80 !important;
+}
+
+/* Header */
 header {
     text-align: center;
     margin-bottom: 24px;
@@ -38,7 +113,37 @@ header {
 
 header h1 {
     font-size: 1.5rem;
+}
+
+.header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: 12px;
+}
+
+.header-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.icon-btn {
+    background: var(--surface2);
+    border: none;
+    color: var(--text-dim);
+    font-size: 1.1rem;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.icon-btn:hover {
+    background: #1a4a80;
+    color: var(--text);
 }
 
 .date-nav {
@@ -186,9 +291,18 @@ header h1 {
     background: #2980b9;
 }
 
-#log-btn:disabled {
+#log-btn:disabled, #save-template-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+#save-template-btn {
+    padding: 10px 16px;
+    border: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border-radius: var(--radius);
+    cursor: pointer;
 }
 
 #loading {
@@ -367,4 +481,81 @@ header h1 {
 .saved-meal-card button:hover {
     color: var(--danger);
     background: rgba(255, 255, 255, 0.08);
+}
+
+/* Settings Modal */
+#settings-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 16px;
+}
+
+.settings-modal {
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 24px;
+    width: 100%;
+    max-width: 360px;
+}
+
+.settings-modal h2 {
+    font-size: 1.2rem;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.settings-modal label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+}
+
+.settings-modal input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 2px solid var(--surface2);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.95rem;
+    border-radius: var(--radius);
+    outline: none;
+    margin-top: 4px;
+}
+
+.settings-modal input:focus {
+    border-color: var(--protein-color);
+}
+
+.settings-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 20px;
+}
+
+.settings-actions button {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border-radius: var(--radius);
+    cursor: pointer;
+}
+
+#settings-save-btn {
+    background: var(--protein-color);
+    color: #fff;
+}
+
+#settings-save-btn:hover {
+    background: #2980b9;
 }

@@ -42,10 +42,18 @@ class MealRecord(FoodEntry):
     created_at: str
 
 
+class UserSettings(BaseModel):
+    calories_target: float
+    protein_target: float
+    carbs_target: float
+    fat_target: float
+
+
 class DayResponse(BaseModel):
     date: str
     entries: list[MealRecord]
     totals: dict
+    targets: UserSettings | None = None
 
 
 class SaveMealRequest(BaseModel):
@@ -61,3 +69,19 @@ class SavedMeal(BaseModel):
     carbs_per_100g: float
     fat_per_100g: float
     default_serving_g: float
+
+
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class SaveMealDirectRequest(BaseModel):
+    text: str
+    name: str
+    serving_size_g: float | None = None
