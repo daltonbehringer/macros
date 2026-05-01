@@ -29,14 +29,14 @@ Sequencing follows the spec's build order with concrete checkable items. Each se
 - [x] Root `.gitignore` for Node monorepo
 - [x] `pnpm dev` ready (currently each app run individually until pnpm is on PATH)
 
-## Step 1 — DB schema + RLS + safe query helper (PR 2)
+## Step 1 — DB schema + RLS + safe query helper (PR 2) ✅
 
-- [ ] Drizzle schema for: `users`, `user_profiles`, `meals`, `workouts`, `recipes`, `chat_messages`
-- [ ] Indexes: `(user_id, consumed_at)` on meals, `(user_id, performed_at)` on workouts, `(user_id, created_at)` on chat_messages
-- [ ] First migration `0001_initial.sql`
-- [ ] Enable RLS on every user-scoped table; policy `USING (user_id = current_setting('app.current_user_id')::uuid)`
-- [ ] `db.forUser(userId)` wrapper — sets GUC, returns query builder; raw `db` not exported to route handlers
-- [ ] Integration test: user A cannot read or write user B's rows (covers app-layer scoping AND RLS bypass attempt)
+- [x] Drizzle schema for: `users`, `user_profiles`, `meals`, `workouts`, `recipes`, `chat_messages`
+- [x] Indexes: `(user_id, consumed_at)` on meals, `(user_id, performed_at)` on workouts, `(user_id, created_at)` on chat_messages, `(user_id)` on recipes
+- [x] Generated `0000_*.sql` (tables + FKs + indexes) and hand-written `0001_rls.sql` (enable + force + policies with NULLIF guard)
+- [x] `0002_app_role.sql` — non-super `app_user` role; `forUser()` does `SET LOCAL ROLE app_user` so RLS actually applies (superusers bypass otherwise)
+- [x] `forUser(db, userId, fn)` helper — txn-scoped, validates UUID, sets ROLE + GUC
+- [x] 12 integration tests passing — input validation, GUC propagation, cross-user SELECT/UPDATE/INSERT/DELETE blocked on every user-scoped table, fail-closed when no GUC
 
 ## Step 2 — Stytch auth end-to-end (PR 3)
 
@@ -136,3 +136,18 @@ Sequencing follows the spec's build order with concrete checkable items. Each se
 - Tailwind v4 is still beta in pinned versions; bump to GA before deploy.
 - `STYTCH_PUBLIC_TOKEN` is empty in `.env.local` — must be filled in from the Stytch dashboard before PR 3 (auth) can be tested end-to-end.
 - `NEXT_PUBLIC_STYTCH_PUBLIC_TOKEN` in `apps/web/.env.local` is also empty for the same reason.
+
+### PR 2 — DB schema + RLS + forUser (2026-05-01)
+
+**What landed.** Six Drizzle tables (`users`, `user_profiles`, `meals`, `workouts`, `recipes`, `chat_messages`) with UUID PKs, timestamptz, jsonb where appropriate, and FK cascade-delete from `users`. Indexes on every `user_id` access path. Three migrations: generated `0000_*` for tables/FKs/indexes, hand-written `0001_rls.sql` enabling + forcing RLS with policies keyed on `NULLIF(current_setting('app.current_user_id', true), '')::uuid`, and `0002_app_role.sql` creating the non-super `app_user` role with the minimum CRUD grants. `forUser(db, userId, fn)` opens a transaction, `SET LOCAL ROLE app_user`, sets the GUC, then runs the callback — the only sanctioned path to user data. 12 vitest integration tests cover input validation, GUC propagation, and cross-user SELECT/UPDATE/INSERT/DELETE blocking on every user-scoped table; "no GUC means no rows" is verified explicitly.
+
+**Verified.**
+- `pnpm db:migrate` cleanly applies all three migrations to a fresh `macros` database.
+- `pnpm --filter @macros/db test` — 12/12 green.
+- Tests reset `macros_test` from scratch on each run via `setup.ts`, so they're hermetic.
+
+**Watch.**
+- Two design decisions worth flagging for PR 3 review:
+  1. `users` table is intentionally NOT under RLS — auth needs to look up by `stytch_user_id` pre-context. Application middleware is the sole guard.
+  2. `set_config(...,true)` leaves `''` as the prior value once the GUC has been touched in a session. Policies use `NULLIF(...,'')::uuid` to fail closed on that path. If anyone changes the policy SQL, they must preserve the `NULLIF`.
+- Migration `0002` creates `app_user` if missing — idempotent on re-run, but production Postgres roles are typically managed out-of-band. Railway Postgres should be checked in PR 11 to ensure the migration's `CREATE ROLE` doesn't fail (and if it does, fall back to a manual one-time setup script).

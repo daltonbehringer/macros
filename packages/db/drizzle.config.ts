@@ -1,9 +1,11 @@
+import { config } from "dotenv";
 import { defineConfig } from "drizzle-kit";
 
-const url = process.env.DATABASE_URL;
-if (!url) {
-  throw new Error("DATABASE_URL is required for drizzle-kit");
-}
+// drizzle-kit runs from packages/db; load env from the api app where it lives.
+config({ path: "../../apps/api/.env.local" });
+config({ path: "../../apps/api/.env" });
+
+const url = process.env.DATABASE_URL ?? "postgres://placeholder@localhost/placeholder";
 
 export default defineConfig({
   schema: "./src/schema/index.ts",
