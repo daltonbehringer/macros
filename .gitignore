@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+.next/
+.turbo/
+*.tsbuildinfo
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Drizzle generated migrations are tracked; meta cache is not
+packages/db/drizzle/meta/_journal.json.bak
+
+# Misc
+coverage/
+*.pyc
+__pycache__/
+macrosMVP_phase1.md
