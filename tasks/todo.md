@@ -38,16 +38,16 @@ Sequencing follows the spec's build order with concrete checkable items. Each se
 - [x] `forUser(db, userId, fn)` helper — txn-scoped, validates UUID, sets ROLE + GUC
 - [x] 12 integration tests passing — input validation, GUC propagation, cross-user SELECT/UPDATE/INSERT/DELETE blocked on every user-scoped table, fail-closed when no GUC
 
-## Step 2 — Stytch auth end-to-end (PR 3)
+## Step 2 — Stytch auth end-to-end (PR 3) ✅
 
-- [ ] `apps/api/src/auth/stytch.ts` — magic link send + authenticate
-- [ ] `apps/api/src/auth/google.ts` — OAuth start + callback
-- [ ] Session middleware: validates Stytch session cookie, attaches `req.userId`, sets PG GUC at start of request
-- [ ] On first auth for an unknown `stytch_user_id`: insert `users` row + empty `user_profiles`
-- [ ] `apps/web/app/login/page.tsx` — magic link form + Google button
-- [ ] `apps/web/app/auth/callback/page.tsx` — token exchange
-- [ ] `GET /me` returns current user + profile, used to gate protected routes
-- [ ] Stytch dashboard: redirect URLs for `localhost:3000`, `*.vercel.app`, `macros.dalty.io`
+- [x] `apps/api/src/auth/stytch.ts` — magic link send + authenticate, OAuth authenticate, session validate/revoke
+- [x] OAuth start happens client-side via `https://test.stytch.com/v1/public/oauth/google/start` redirect (no backend route needed)
+- [x] `requireAuth` preHandler: validates Stytch session cookie, attaches `req.user`. GUC is set per-query inside `forUser()`, not in middleware.
+- [x] First-auth provisioning: insert `users` row + empty `user_profiles` (latter via `forUser()`)
+- [x] `apps/web/app/login/page.tsx` — magic link form + Google button
+- [x] `apps/web/app/auth/callback/page.tsx` — token exchange (handles both `magic_links` and `oauth` types)
+- [x] `GET /me` returns current user + profile
+- [ ] **User action**: register redirect URLs in Stytch dashboard (see PR 3 review)
 
 ## Step 3 — Settings + TDEE (PR 4)
 
@@ -151,3 +151,24 @@ Sequencing follows the spec's build order with concrete checkable items. Each se
   1. `users` table is intentionally NOT under RLS — auth needs to look up by `stytch_user_id` pre-context. Application middleware is the sole guard.
   2. `set_config(...,true)` leaves `''` as the prior value once the GUC has been touched in a session. Policies use `NULLIF(...,'')::uuid` to fail closed on that path. If anyone changes the policy SQL, they must preserve the `NULLIF`.
 - Migration `0002` creates `app_user` if missing — idempotent on re-run, but production Postgres roles are typically managed out-of-band. Railway Postgres should be checked in PR 11 to ensure the migration's `CREATE ROLE` doesn't fail (and if it does, fall back to a manual one-time setup script).
+
+### PR 3 — Stytch auth end-to-end (2026-05-01)
+
+**What landed.** `apps/api/src/auth/` — Stytch client wrapper (`stytch.ts`), cookie config (`cookie.ts`), `requireAuth` Fastify preHandler (`middleware.ts`), first-login user provisioning (`provision.ts`), routes (`routes.ts`: `POST /auth/magic-link/send`, `POST /auth/authenticate`, `POST /auth/logout`, `GET /me`). API uses an HttpOnly `macros_session` cookie scoped to the API origin, `SameSite=Lax`, `Secure` in production. CORS allows credentials from the configured frontend origin. On first auth, we insert `users` then `user_profiles` (the latter through `forUser()` so RLS WITH CHECK accepts it). `/me` is the only protected route in this PR; later routes will add `{ preHandler: requireAuth }`.
+
+Web side: `apps/web/lib/api.ts` is the typed fetch wrapper (always `credentials: "include"`), `app/login/page.tsx` has email + Google buttons (Google redirects to Stytch's hosted OAuth start with `public_token`), `app/auth/callback/page.tsx` exchanges the `?token=` query param for a session, and `app/page.tsx` is now gated — calls `/me` on mount, redirects to `/login` on 401.
+
+**Verified.**
+- `pnpm --filter @macros/api typecheck` and `pnpm --filter @macros/web typecheck` clean.
+- `GET /health` 200, `GET /me` 401 (no cookie), bad-input `POST /auth/magic-link/send` returns 400.
+- Real Stytch round-trip: `POST /auth/magic-link/send` to test environment returns Stytch's actual error response (`no_match_for_provided_magic_link_url`) — confirms credentials are loading and the SDK is talking to Stytch.
+- `/login` and `/auth/callback` render correctly server-side; Tailwind classes applied.
+
+**User action required before browser-testing the full flow:**
+1. Stytch Dashboard → **Configuration → Redirect URLs**, add `http://localhost:3000/auth/callback` to the **Login** and **Sign-up** lists for the Test environment.
+2. To test Google OAuth: Stytch Dashboard → **OAuth** → enable Google for the Test project (no Google Cloud setup needed in test mode).
+
+**Watch.**
+- Cross-origin cookie strategy in dev: web at `:3000`, API at `:4000`. Same eTLD+1, so SameSite=Lax sends the cookie on `fetch(..., { credentials: "include" })`. In prod we'll either subdomain (`api.macros.dalty.io` + `Domain=.macros.dalty.io`) or use Vercel rewrites to make API same-origin — decide in PR 11.
+- We call `stytch.sessions.authenticate` on every protected request. ~50–100ms. JWT verification is offline and cacheable; revisit in PR 6+ if request latency matters.
+- Google OAuth start URL hard-codes `test.stytch.com`. Swap to `api.stytch.com` (or use `STYTCH_LIVE` env) in PR 11.

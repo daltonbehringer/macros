@@ -1,6 +1,7 @@
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import Fastify from "fastify";
+import { authRoutes } from "./auth/routes";
 import { env } from "./env";
 
 export function buildServer() {
@@ -25,6 +26,8 @@ export function buildServer() {
     env: env.NODE_ENV,
     time: new Date().toISOString(),
   }));
+
+  app.register(authRoutes);
 
   return app;
 }

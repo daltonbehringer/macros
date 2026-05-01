@@ -18,6 +18,7 @@
     "@macros/db": "workspace:*",
     "@macros/shared": "workspace:*",
     "dotenv": "^16.4.5",
+    "drizzle-orm": "^0.36.4",
     "fastify": "^5.1.0",
     "stytch": "^12.10.0",
     "zod": "^3.23.8"

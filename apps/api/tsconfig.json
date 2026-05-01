@@ -1,13 +1,13 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "src",
     "outDir": "dist",
     "noEmit": true,
     "types": ["node"],
     "paths": {
       "@macros/shared": ["../../packages/shared/src/index.ts"],
-      "@macros/db": ["../../packages/db/src/index.ts"]
+      "@macros/db": ["../../packages/db/src/index.ts"],
+      "@macros/db/schema": ["../../packages/db/src/schema/index.ts"]
     }
   },
   "include": ["src/**/*.ts"]
