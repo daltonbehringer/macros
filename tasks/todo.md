@@ -49,21 +49,22 @@ Sequencing follows the spec's build order with concrete checkable items. Each se
 - [x] `GET /me` returns current user + profile
 - [ ] **User action**: register redirect URLs in Stytch dashboard (see PR 3 review)
 
-## Step 3 — Settings + TDEE (PR 4)
+## Step 3 — Settings + TDEE (PR 4) ✅
 
-- [ ] `/settings` page: height, weight, age, sex, activity level, unit system
-- [ ] BMR via Mifflin-St Jeor; TDEE = BMR × activity multiplier
-- [ ] Derived macro defaults: protein `0.8 × weight_lb`, fat `0.25 × TDEE / 9`, carbs fill remainder
-- [ ] Manual override fields for daily calorie / protein / carbs / fat targets
-- [ ] "How we calculate your targets" expandable section showing the math
-- [ ] Delete-all-data button: typed-DELETE confirmation, deletes from every user-scoped table including `chat_messages`
+- [x] `/settings` page: height (ft+in or cm), weight (lb or kg), age, sex, activity level, unit system, timezone (with browser autodetect)
+- [x] BMR (Mifflin–St Jeor) and TDEE in `packages/shared/src/macros.ts`; `effectiveTargets()` resolves overrides → computed → null
+- [x] Derived macro defaults: 0.8 g/lb protein, 25% fat, carbs remainder
+- [x] Override fields for calorie / protein / carbs / fat with computed values shown as placeholders
+- [x] "How we calculate your targets" expandable section
+- [x] Delete-all-data: typed-DELETE modal → wipes every user-scoped table including `chat_messages` and the `users` row, revokes Stytch session, redirects to `/login`
 
-## Step 4 — Manual logging (PR 5)
+## Step 4 — Manual logging (PR 5) ✅
 
-- [ ] `POST /meals`, `DELETE /meals/:id`, `GET /meals?date=` — manual entry path, no LLM yet
-- [ ] `POST /workouts`, `DELETE /workouts/:id`, `GET /workouts?date=`
-- [ ] All inputs validated with zod, all queries via `db.forUser(userId)`
-- [ ] Quick-add forms on dashboard
+- [x] `POST /meals`, `GET /meals?from=&to=`, `DELETE /meals/:id` — manual entry path, source forced to `"manual"` server-side
+- [x] `POST /workouts`, `GET /workouts?from=&to=`, `DELETE /workouts/:id`
+- [x] All inputs validated with zod, all queries via `forUser(userId)` so RLS applies
+- [x] Today view on home: meal + workout forms, totals bar (eaten / burned / remaining / protein progress), inline lists with optimistic delete
+- [x] Range queries take ISO `from`/`to` so the client computes "today in browser TZ" once and the server stays TZ-agnostic
 
 ## Step 5 — Dashboard (PR 6)
 
@@ -172,3 +173,36 @@ Web side: `apps/web/lib/api.ts` is the typed fetch wrapper (always `credentials:
 - Cross-origin cookie strategy in dev: web at `:3000`, API at `:4000`. Same eTLD+1, so SameSite=Lax sends the cookie on `fetch(..., { credentials: "include" })`. In prod we'll either subdomain (`api.macros.dalty.io` + `Domain=.macros.dalty.io`) or use Vercel rewrites to make API same-origin — decide in PR 11.
 - We call `stytch.sessions.authenticate` on every protected request. ~50–100ms. JWT verification is offline and cacheable; revisit in PR 6+ if request latency matters.
 - Google OAuth start URL hard-codes `test.stytch.com`. Swap to `api.stytch.com` (or use `STYTCH_LIVE` env) in PR 11.
+
+### PR 4 — Settings + TDEE (2026-05-01)
+
+**What landed.** `apps/api/src/profile/routes.ts` exposes `GET /profile`, `PUT /profile` (PATCH semantics — only sent keys are written), and `DELETE /me/data` (requires `{confirmation: "DELETE"}` in the body, wipes every user-scoped table via `forUser()` plus the `users` row, revokes the Stytch session, clears the cookie). `packages/shared` got `effectiveTargets()` plus camelCase'd schemas to match Drizzle's wire format (every `*_g` → `*G`, `weight_kg` → `weightKg`, etc.). Web side: `apps/web/lib/units.ts` has the lb/kg + ft+in/cm converters; `apps/web/app/settings/page.tsx` is the form with sectioned account/profile/targets/danger-zone, ToggleGroup + NumberInput + HeightInput + WeightInput inputs, an expandable "how we calculate" panel that shows the live TDEE/macro numbers when the profile is complete, and a typed-DELETE modal. Home page now links to `/settings`.
+
+**Verified.**
+- `pnpm --filter @macros/{shared,api,web} typecheck` clean across the board.
+- `pnpm --filter @macros/db test` — 12/12 still green after the schema rename.
+- `GET /profile`, `PUT /profile`, `DELETE /me/data` all return 401 without a session cookie.
+- `/settings` SSR renders the loading shell; client-side fetch returns 401, redirect logic kicks in.
+
+**Watch.**
+- Profile PATCH excludes `userId`, `createdAt`, `updatedAt` by virtue of zod schema. If you ever broaden `UpdateUserProfile`, audit which keys land in `set()`.
+- Unit conversion happens in the input components — display value lives in user's chosen unit, canonical metric in `profile`. If a future refactor splits "draft" from "saved" state, watch for the round-tripping (lb→kg→lb may drift by ±0.1 lb due to flooring).
+- Delete flow deletes the `users` row last, outside `forUser()`. If a future change adds new RLS-protected tables that reference `users`, add their delete inside the `forUser()` block before the `users` delete fires.
+- Timezone is a free-text field today. PR 5+ should validate against `Intl.supportedValuesOf("timeZone")` server-side before stamping it on `consumed_at` queries.
+
+### PR 5 — Manual logging (2026-05-01)
+
+**What landed.** `apps/api/src/{meals,workouts}/routes.ts` — three routes each: `POST` (create, validated by zod), `GET ?from=&to=` (date-range listing), `DELETE /:id`. Every query goes through `forUser()`. Meal `source` is server-forced to `"manual"` regardless of what the client sends, so the LLM-parsed path (PR 7) lands on its own seam. Range queries take ISO `from`/`to` strings — the client computes today's UTC range from the browser's TZ via `apps/web/lib/dates.ts:todayRange()`, which keeps the server TZ-agnostic.
+
+Web side: `apps/web/lib/api.ts` got `listMeals` / `createMeal` / `deleteMeal` and the same trio for workouts. `apps/web/app/page.tsx` is now the Today view: header (email / Settings / Sign out), totals bar (eaten / burned / remaining calories + protein progress against target), two side-by-side forms (meal: description + cal + P/C/F; workout: description + kcal burned + duration), and two lists with optimistic delete.
+
+**Verified.**
+- `pnpm typecheck` (turbo) — all 4 packages green.
+- `pnpm --filter @macros/db test` — 12/12 still green.
+- All six new routes return 401 without a session cookie.
+
+**Watch.**
+- "Remaining" calories arithmetic on the totals bar = `target - eaten + burned`. Matches the spec's `consumed − TDEE − active_workout_calories` where target≈TDEE; if/when targets diverge from TDEE (override), this stops being a deficit/surplus signal and becomes a "calories remaining toward target" signal. Re-evaluate the labelling in PR 9 (history charts).
+- The home page is intentionally functional-not-pretty. PR 6 (Dashboard) replaces this layout with macro rings, hero numbers, recent activity feed; the data plumbing here should mostly survive that swap.
+- `formatTime` uses `toLocaleTimeString([], …)` — picks up the browser's locale + TZ. Once `profile.timezone` is reliably populated, switch to `{ timeZone: profile.timezone }` so the rendering matches across devices.
+- Optimistic delete falls back to `refresh()` on error, so a network blip restores state. No toast yet — silent recovery is fine for MVP, revisit when adding error UX globally.

@@ -1,3 +1,12 @@
+import type {
+  CreateMealInput,
+  CreateWorkoutInput,
+  Meal,
+  UpdateUserProfile,
+  UserProfile,
+  Workout,
+} from "@macros/shared";
+
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -11,11 +20,12 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const hasBody = init.body !== undefined && init.body !== null;
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     credentials: "include",
     headers: {
-      "content-type": "application/json",
+      ...(hasBody ? { "content-type": "application/json" } : {}),
       ...(init.headers ?? {}),
     },
   });
@@ -32,26 +42,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export type Me = {
   user: { id: string; email: string };
-  profile: {
-    userId: string;
-    heightCm: number | null;
-    weightKg: number | null;
-    age: number | null;
-    sex: "male" | "female" | null;
-    activityLevel:
-      | "sedentary"
-      | "light"
-      | "moderate"
-      | "active"
-      | "very_active"
-      | null;
-    dailyCalorieTarget: number | null;
-    dailyProteinG: number | null;
-    dailyCarbsG: number | null;
-    dailyFatG: number | null;
-    unitSystem: "metric" | "imperial";
-    timezone: string;
-  } | null;
+  profile: UserProfile | null;
 };
 
 export const api = {
@@ -67,4 +58,30 @@ export const api = {
       body: JSON.stringify({ token, type }),
     }),
   logout: () => request<{ ok: true }>("/auth/logout", { method: "POST" }),
+  getProfile: () => request<UserProfile>("/profile"),
+  updateProfile: (patch: UpdateUserProfile) =>
+    request<UserProfile>("/profile", {
+      method: "PUT",
+      body: JSON.stringify(patch),
+    }),
+  deleteAllData: () =>
+    request<{ ok: true }>("/me/data", {
+      method: "DELETE",
+      body: JSON.stringify({ confirmation: "DELETE" }),
+    }),
+  listMeals: (range: { from: string; to: string }) =>
+    request<Meal[]>(`/meals?${new URLSearchParams(range).toString()}`),
+  createMeal: (body: CreateMealInput) =>
+    request<Meal>("/meals", { method: "POST", body: JSON.stringify(body) }),
+  deleteMeal: (id: string) =>
+    request<{ ok: true }>(`/meals/${id}`, { method: "DELETE" }),
+  listWorkouts: (range: { from: string; to: string }) =>
+    request<Workout[]>(`/workouts?${new URLSearchParams(range).toString()}`),
+  createWorkout: (body: CreateWorkoutInput) =>
+    request<Workout>("/workouts", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  deleteWorkout: (id: string) =>
+    request<{ ok: true }>(`/workouts/${id}`, { method: "DELETE" }),
 };

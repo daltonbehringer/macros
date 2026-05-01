@@ -2,6 +2,9 @@ import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import Fastify from "fastify";
 import { authRoutes } from "./auth/routes";
+import { mealRoutes } from "./meals/routes";
+import { profileRoutes } from "./profile/routes";
+import { workoutRoutes } from "./workouts/routes";
 import { env } from "./env";
 
 export function buildServer() {
@@ -28,6 +31,9 @@ export function buildServer() {
   }));
 
   app.register(authRoutes);
+  app.register(profileRoutes);
+  app.register(mealRoutes);
+  app.register(workoutRoutes);
 
   return app;
 }

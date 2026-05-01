@@ -5,26 +5,26 @@ export type MealSource = z.infer<typeof MealSource>;
 
 export const Meal = z.object({
   id: z.string().uuid(),
-  user_id: z.string().uuid(),
-  consumed_at: z.string().datetime(),
+  userId: z.string().uuid(),
+  consumedAt: z.string().datetime(),
   description: z.string(),
   calories: z.number().nonnegative(),
-  protein_g: z.number().nonnegative(),
-  carbs_g: z.number().nonnegative(),
-  fat_g: z.number().nonnegative(),
+  proteinG: z.number().nonnegative(),
+  carbsG: z.number().nonnegative(),
+  fatG: z.number().nonnegative(),
   source: MealSource,
-  recipe_id: z.string().uuid().nullable(),
-  created_at: z.string().datetime(),
+  recipeId: z.string().uuid().nullable(),
+  createdAt: z.string().datetime(),
 });
 export type Meal = z.infer<typeof Meal>;
 
-export const CreateMeal = Meal.omit({
-  id: true,
-  user_id: true,
-  created_at: true,
-}).extend({
-  consumed_at: z.string().datetime().optional(),
-  source: MealSource.default("manual"),
-  recipe_id: z.string().uuid().nullable().optional(),
+/** What the manual-entry POST /meals body accepts. */
+export const CreateMealInput = z.object({
+  description: z.string().min(1).max(500),
+  calories: z.number().nonnegative(),
+  proteinG: z.number().nonnegative(),
+  carbsG: z.number().nonnegative(),
+  fatG: z.number().nonnegative(),
+  consumedAt: z.string().datetime().optional(),
 });
-export type CreateMeal = z.infer<typeof CreateMeal>;
+export type CreateMealInput = z.infer<typeof CreateMealInput>;

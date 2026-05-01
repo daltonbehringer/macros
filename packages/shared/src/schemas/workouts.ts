@@ -2,21 +2,19 @@ import { z } from "zod";
 
 export const Workout = z.object({
   id: z.string().uuid(),
-  user_id: z.string().uuid(),
-  performed_at: z.string().datetime(),
+  userId: z.string().uuid(),
+  performedAt: z.string().datetime(),
   description: z.string(),
-  calories_burned: z.number().nonnegative(),
-  duration_minutes: z.number().nonnegative().nullable(),
-  created_at: z.string().datetime(),
+  caloriesBurned: z.number().nonnegative(),
+  durationMinutes: z.number().int().nonnegative().nullable(),
+  createdAt: z.string().datetime(),
 });
 export type Workout = z.infer<typeof Workout>;
 
-export const CreateWorkout = Workout.omit({
-  id: true,
-  user_id: true,
-  created_at: true,
-}).extend({
-  performed_at: z.string().datetime().optional(),
-  duration_minutes: z.number().nonnegative().nullable().optional(),
+export const CreateWorkoutInput = z.object({
+  description: z.string().min(1).max(500),
+  caloriesBurned: z.number().nonnegative(),
+  durationMinutes: z.number().int().nonnegative().nullable().optional(),
+  performedAt: z.string().datetime().optional(),
 });
-export type CreateWorkout = z.infer<typeof CreateWorkout>;
+export type CreateWorkoutInput = z.infer<typeof CreateWorkoutInput>;
