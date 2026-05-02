@@ -35,3 +35,26 @@ export function todayLabel(now = new Date()): string {
     day: "numeric",
   });
 }
+
+/** Build a YYYY-MM-DD range ending today, going back N days inclusive. */
+export function lastNDaysRange(n: number, now = new Date()): {
+  from: string;
+  to: string;
+} {
+  const to = new Date(now);
+  to.setHours(0, 0, 0, 0);
+  const from = new Date(to);
+  from.setDate(from.getDate() - (n - 1));
+  return { from: localISODate(from), to: localISODate(to) };
+}
+
+function localISODate(d: Date): string {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+export function browserTimezone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+}

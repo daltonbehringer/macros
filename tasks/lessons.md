@@ -26,6 +26,18 @@ _Updated as corrections are made during development._
 
 **How to apply**: any new RLS-bearing project on a connection that has elevated privileges (which is normal for app DB users on Railway/Supabase/Neon) needs this two-role pattern, or a non-super connection role from the start.
 
+## Drizzle: same `${value}` interpolation in two places renders as two distinct params
+
+**Symptom**: a `GROUP BY <expr>` that's textually identical to the `SELECT <expr>` 400s with `column "..." must appear in the GROUP BY clause` (Postgres error 42803).
+
+**Root cause**: when the same JavaScript value is interpolated twice via `sql\`...${value}...\``, Drizzle issues two separate `$N` placeholders. Postgres compares GROUP BY expressions to SELECT expressions by their parsed expression tree — the parameter index is part of that tree, so `$1` and `$2` are not the same expression even when both bind the identical value. The error message points at the column inside the expression because Postgres can't see that the user-grouped expression matches.
+
+**Rule**: when the same value (typically a config string like a timezone) needs to appear in both clauses, validate it server-side and inline it via `sql.raw(\`'${value}'\`)`. This bypasses parameter binding so SELECT and GROUP BY render the identical literal.
+
+**Reference fix**: [`apps/api/src/history/routes.ts`](apps/api/src/history/routes.ts) — `tzLiteral = sql.raw(\`'${tz}'\`)` after Intl-validating `tz`.
+
+**How to apply**: any time the same scalar is used in both the projection and a GROUP BY / WINDOW / ORDER BY expression, validate + `sql.raw` rather than relying on Drizzle to dedupe parameters.
+
 ## Postgres custom GUCs — use `NULLIF(current_setting(name, true), '')`
 
 **Symptom**: RLS policy errors with `invalid input syntax for type uuid: ""` after the first request in a session.

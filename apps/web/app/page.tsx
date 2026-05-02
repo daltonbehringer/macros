@@ -102,6 +102,12 @@ export default function HomePage() {
         <div className="flex items-center gap-3 text-sm">
           <span className="hidden text-zinc-500 sm:inline">{me.user.email}</span>
           <a
+            href="/history"
+            className="rounded-md border border-zinc-300 px-3 py-1 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+          >
+            History
+          </a>
+          <a
             href="/recipes"
             className="rounded-md border border-zinc-300 px-3 py-1 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
           >

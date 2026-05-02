@@ -3,6 +3,7 @@ import cors from "@fastify/cors";
 import Fastify from "fastify";
 import { authRoutes } from "./auth/routes";
 import { chatRoutes } from "./chat/routes";
+import { historyRoutes } from "./history/routes";
 import { mealRoutes } from "./meals/routes";
 import { profileRoutes } from "./profile/routes";
 import { recipeRoutes } from "./recipes/routes";
@@ -37,6 +38,7 @@ export function buildServer() {
   app.register(mealRoutes);
   app.register(workoutRoutes);
   app.register(recipeRoutes);
+  app.register(historyRoutes);
   app.register(chatRoutes);
 
   return app;

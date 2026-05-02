@@ -93,11 +93,12 @@ Sequencing follows the spec's build order with concrete checkable items. Each se
 - [x] Manual logging path: `POST /recipes/:id/log` mirrors the LLM tool's math
 - [x] Header links to /recipes from the dashboard
 
-## Step 8 — History + charts (PR 9)
+## Step 8 — History + charts (PR 9) ✅
 
-- [ ] `/history` with date range picker (day / week / month / custom)
-- [ ] Recharts: calorie trend line, macro stacked bar, deficit/surplus over time
-- [ ] Custom theming matching app accent color, tabular nums on tooltips
+- [x] `/history` with 7d / 30d / 90d / custom range picker
+- [x] Recharts: calorie trend (line + target reference line), macro stacked bar, net-vs-target bar (accent if deficit, red if surplus)
+- [x] Server aggregates per-day in the user's TZ via `(consumed_at AT TIME ZONE tz)::date`; client renders zero-filled rows for missing days
+- [x] Tabular-nums tooltips, dark-themed tooltip surface, accent color on hero metrics
 
 ## Step 9 — Polish (PR 10)
 
@@ -248,6 +249,21 @@ Web side: `apps/web/lib/api.ts` got `listRecipes`, `createRecipe`, `updateRecipe
 - The ingredients textarea uses `name | quantity` per line. Save/load round-trips faithfully but loses any structure beyond two fields. Fine for MVP; swap to a proper repeater if users want more shape (servings size, calories per ingredient, etc.).
 - Recipe delete is hard delete — meals previously logged via that recipe keep their copied macros (description includes the recipe name), and `meal.recipe_id` is set to NULL by the FK's `ON DELETE SET NULL`. Worth confirming the home activity feed still renders those orphaned meal rows correctly.
 - The chat system prompt does NOT mention recipes explicitly. Add a "Use saved recipes when the user references a meal by name" hint to `STABLE_PROMPT` if the model under-uses `get_recipes` in practice.
+
+### PR 9 — History + charts (2026-05-02)
+
+**What landed.** `apps/api/src/history/routes.ts` — `GET /history?from=&to=&timezone=` returns daily aggregates (calories consumed, P/C/F, calories burned) plus the user's targets. Aggregation happens in Postgres via `((consumed_at) AT TIME ZONE $tz)::date::text` so day boundaries respect the user's local time. Resolves timezone from query param → profile.timezone → UTC. UTC bounds are padded by ±1 day to avoid clipping at the local-day edge; the SQL grouping reins everything back to the requested range. Server caps requests at 366 days.
+
+Web: `apps/web/lib/api.ts` got `getHistory()` and a typed `HistoryResponse`. `apps/web/lib/dates.ts` gained `lastNDaysRange()` and `browserTimezone()`. `apps/web/app/history/page.tsx` is the page: 7d / 30d / 90d / custom preset toggle, summary stat row (avg consumed in accent, avg burned, avg P / C / F), three Recharts panels — calorie line with target ReferenceLine, stacked macro bar (pink-400 / blue-400 / amber-400), net-vs-target bar with cells colored accent when negative (deficit) and red when positive (surplus). Empty target shows a "go set a calorie target in Settings" nudge. Dashboard header gets a History link.
+
+**Verified.** Full `pnpm typecheck` clean. `/history` returns 401 without a session.
+
+**Watch.**
+- Server-side aggregation produces strings for the day field (`::date::text`). Client coerces values to `Number()` defensively because postgres-js returns numerics as strings in some configs — already happens here.
+- Custom date-range inputs use the native `<input type="date">`. Cross-browser styling is uneven; if the picker UX matters, swap to a datepicker library.
+- Net-vs-target chart hides if no calorie target is set (replaces the chart body with the Settings link). Macro net comparisons could follow the same model later.
+- The `MAX_RANGE_DAYS = 366` cap exists for safety; bumping it requires verifying Recharts doesn't choke on >1000 data points (right now the grid rendering is fine to ~120).
+- Targets in the response are *base* targets (no workout-burn bonus). For per-day budget visualization that accounts for that day's workouts, do the math client-side per row.
 
 ### PR 6 — Dashboard (2026-05-01)
 

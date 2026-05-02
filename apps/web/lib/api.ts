@@ -124,5 +124,32 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ servings }),
     }),
+  getHistory: (args: { from: string; to: string; timezone?: string }) => {
+    const qs = new URLSearchParams({ from: args.from, to: args.to });
+    if (args.timezone) qs.set("timezone", args.timezone);
+    return request<HistoryResponse>(`/history?${qs.toString()}`);
+  },
 };
+
+export type HistoryResponse = {
+  from: string;
+  to: string;
+  timezone: string;
+  targets: {
+    calories: number | null;
+    proteinG: number | null;
+    carbsG: number | null;
+    fatG: number | null;
+    tdeeKcal: number | null;
+  } | null;
+  days: Array<{
+    date: string;
+    caloriesConsumed: number;
+    proteinG: number;
+    carbsG: number;
+    fatG: number;
+    caloriesBurned: number;
+  }>;
+};
+
 
