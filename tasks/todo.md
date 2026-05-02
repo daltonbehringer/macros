@@ -66,13 +66,14 @@ Sequencing follows the spec's build order with concrete checkable items. Each se
 - [x] Today view on home: meal + workout forms, totals bar (eaten / burned / remaining / protein progress), inline lists with optimistic delete
 - [x] Range queries take ISO `from`/`to` so the client computes "today in browser TZ" once and the server stays TZ-agnostic
 
-## Step 5 — Dashboard (PR 6)
+## Step 5 — Dashboard (PR 6) ✅
 
-- [ ] Today's macro rings (calories + 3 macros) with accent color on calorie ring
-- [ ] Calories remaining = target − consumed + active workout burn
-- [ ] Recent activity feed (last 10 meals + workouts merged, sorted desc)
-- [ ] Quick chat input (Enter submits, opens chat drawer with the message)
-- [ ] Tabular nums everywhere numeric
+- [x] Four `MacroRing`s — calorie ring uses accent color, macros use neutral zinc; ring turns red on overshoot
+- [x] Hero "remaining" number top of page in accent (or red when negative); fallback prompt to Settings when profile incomplete
+- [x] `ActivityFeed` — merged meals + workouts, sorted desc, capped to 10, accent dot for meals / outline dot for workouts; per-row delete on hover
+- [x] `QuickChatInput` — placeholder textarea (Enter submits, Shift+Enter newline); shows "coming next PR" hint until PR 7 wires the real chat
+- [x] Manual log forms moved behind a "+ Log manually" toggle so they stay accessible while not dominating the dashboard
+- [x] `tabular-nums` on every number that displays
 
 ## Step 6 — LLM chat with tool use (PR 7)
 
@@ -206,3 +207,20 @@ Web side: `apps/web/lib/api.ts` got `listMeals` / `createMeal` / `deleteMeal` an
 - The home page is intentionally functional-not-pretty. PR 6 (Dashboard) replaces this layout with macro rings, hero numbers, recent activity feed; the data plumbing here should mostly survive that swap.
 - `formatTime` uses `toLocaleTimeString([], …)` — picks up the browser's locale + TZ. Once `profile.timezone` is reliably populated, switch to `{ timeZone: profile.timezone }` so the rendering matches across devices.
 - Optimistic delete falls back to `refresh()` on error, so a network blip restores state. No toast yet — silent recovery is fine for MVP, revisit when adding error UX globally.
+
+### PR 6 — Dashboard (2026-05-01)
+
+**What landed.** Three new components in `apps/web/components/`:
+- [`MacroRing.tsx`](apps/web/components/MacroRing.tsx) — SVG ring (120px, 8px stroke, animated dashoffset). Track is zinc-200/800, fill is `--color-accent` for the calorie ring and zinc-400 for macros, switches to red when overshooting. Big tabular-nums center number with `/ target` subtitle, capitalized label below.
+- [`ActivityFeed.tsx`](apps/web/components/ActivityFeed.tsx) — merges `meals` + `workouts` by timestamp, slices to 10. Each row: time / colored dot / title / detail / hover-only delete ✕. Meals use accent dot, workouts an outlined dot.
+- [`QuickChatInput.tsx`](apps/web/components/QuickChatInput.tsx) — textarea with Enter-to-send, hint line. Submission shows a "coming next PR" hint; real chat lands in PR 7.
+
+`apps/web/app/page.tsx` rebuilt around these: hero "remaining kcal" number, four-up rings grid (collapses to 2x2 on mobile), chat input, activity feed, manual log forms hidden behind a `+ Log manually` toggle. Used the previously-discovered fetch-wrapper fix so deletes don't 400.
+
+**Verified.** `pnpm --filter @macros/web typecheck` clean. Page SSRs to the loading shell (correct without cookie). Browser-side verification in user's hands.
+
+**Watch.**
+- `MacroRing` overshoot threshold is 1.0 — anything above target shows red. If users want "approaching target" warnings before overshoot (e.g. 90%), add a third state.
+- The chat input intercepts Enter inside the textarea. If we later want multi-line by default and Cmd+Enter to send, swap the key handler.
+- Activity feed's delete ✕ uses `opacity-0 group-hover:opacity-100`. On touch devices that have no hover, the button only becomes visible on focus (also handled). If touch UX feels broken, switch to always-visible.
+- Manual forms inside the collapsed section duplicate the post-create `onCreated -> refresh` plumbing from PR 5. They'll likely be removed entirely once chat handles the happy path; for now they're the documented escape hatch.

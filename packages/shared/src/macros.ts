@@ -74,18 +74,29 @@ export function defaultMacroTargets(args: {
 }
 
 /**
- * Effective targets for a user: returns null for any macro that can't be
- * computed yet (profile incomplete) and isn't overridden. Otherwise overrides
- * win, then computed defaults fill in the rest.
+ * Effective targets for a user. Returns null for any value that can't be
+ * computed yet (profile incomplete) and isn't overridden.
+ *
+ * `extraCaloriesAvailable` (typically active workout burn for the day) inflates
+ * the budget: the calorie target gets +burn, and the energy macros (carbs, fat)
+ * absorb the extra in a 75/25 split (matching the default split used elsewhere).
+ * Protein stays put — it's a bodyweight-driven floor, not an energy target.
  */
-export function effectiveTargets(profile: UserProfile): {
+export function effectiveTargets(
+  profile: UserProfile,
+  options: { extraCaloriesAvailable?: number } = {},
+): {
   calories: number | null;
   proteinG: number | null;
   carbsG: number | null;
   fatG: number | null;
   computed: ComputedTargets | null;
   tdeeKcal: number | null;
+  /** What the burn added on top of the base goal (zero when no extra). */
+  bonus: { calories: number; carbsG: number; fatG: number };
 } {
+  const extra = Math.max(0, options.extraCaloriesAvailable ?? 0);
+
   const canCompute =
     profile.weightKg !== null &&
     profile.heightCm !== null &&
@@ -109,12 +120,27 @@ export function effectiveTargets(profile: UserProfile): {
     });
   }
 
+  // Bonus from extra calories — fat 25% / carbs 75%, protein unchanged.
+  const bonusFatG = Math.round((extra * 0.25) / 9);
+  const bonusCarbsG = Math.max(
+    0,
+    Math.round((extra - bonusFatG * 9) / 4),
+  );
+  const bonus = { calories: extra, carbsG: bonusCarbsG, fatG: bonusFatG };
+
+  const baseCalories =
+    profile.dailyCalorieTarget ?? computed?.calories ?? null;
+  const baseProtein = profile.dailyProteinG ?? computed?.proteinG ?? null;
+  const baseCarbs = profile.dailyCarbsG ?? computed?.carbsG ?? null;
+  const baseFat = profile.dailyFatG ?? computed?.fatG ?? null;
+
   return {
-    calories: profile.dailyCalorieTarget ?? computed?.calories ?? null,
-    proteinG: profile.dailyProteinG ?? computed?.proteinG ?? null,
-    carbsG: profile.dailyCarbsG ?? computed?.carbsG ?? null,
-    fatG: profile.dailyFatG ?? computed?.fatG ?? null,
+    calories: baseCalories === null ? null : baseCalories + bonus.calories,
+    proteinG: baseProtein,
+    carbsG: baseCarbs === null ? null : baseCarbs + bonus.carbsG,
+    fatG: baseFat === null ? null : baseFat + bonus.fatG,
     computed,
     tdeeKcal,
+    bonus,
   };
 }

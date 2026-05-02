@@ -3,8 +3,11 @@
 import { effectiveTargets, type Meal, type Workout } from "@macros/shared";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { ActivityFeed } from "@/components/ActivityFeed";
+import { MacroRing } from "@/components/MacroRing";
+import { QuickChatInput } from "@/components/QuickChatInput";
 import { api, ApiError, type Me } from "@/lib/api";
-import { formatTime, todayRange } from "@/lib/dates";
+import { todayRange } from "@/lib/dates";
 
 export default function HomePage() {
   const router = useRouter();
@@ -12,6 +15,7 @@ export default function HomePage() {
   const [meals, setMeals] = useState<Meal[]>([]);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [showLogForms, setShowLogForms] = useState(false);
   const range = useMemo(() => todayRange(), []);
 
   useEffect(() => {
@@ -44,16 +48,51 @@ export default function HomePage() {
     router.replace("/login");
   };
 
-  if (error) return <Centered danger>{error}</Centered>;
-  if (!me) return <Centered muted>Loading…</Centered>;
+  if (error)
+    return (
+      <Centered>
+        <p className="text-red-600 dark:text-red-400">{error}</p>
+      </Centered>
+    );
+  if (!me)
+    return (
+      <Centered>
+        <p className="text-zinc-500">Loading…</p>
+      </Centered>
+    );
 
   const totals = sumMacros(meals);
   const caloriesBurned = workouts.reduce((s, w) => s + w.caloriesBurned, 0);
-  const targets = me.profile ? effectiveTargets(me.profile) : null;
+  const targets = me.profile
+    ? effectiveTargets(me.profile, { extraCaloriesAvailable: caloriesBurned })
+    : null;
+  const remaining =
+    targets && targets.calories !== null
+      ? targets.calories - totals.calories
+      : null;
+
+  const deleteMeal = async (id: string) => {
+    setMeals((xs) => xs.filter((x) => x.id !== id));
+    try {
+      await api.deleteMeal(id);
+    } catch (err) {
+      console.error("deleteMeal failed", err);
+      await refresh();
+    }
+  };
+  const deleteWorkout = async (id: string) => {
+    setWorkouts((xs) => xs.filter((x) => x.id !== id));
+    try {
+      await api.deleteWorkout(id);
+    } catch (err) {
+      console.error("deleteWorkout failed", err);
+      await refresh();
+    }
+  };
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <header className="mb-8 flex items-center justify-between">
+    <main className="mx-auto max-w-4xl px-6 py-10">
+      <header className="mb-10 flex items-center justify-between">
         <a
           href="/"
           className="font-mono text-xs uppercase tracking-widest text-zinc-500"
@@ -61,7 +100,7 @@ export default function HomePage() {
           macros
         </a>
         <div className="flex items-center gap-3 text-sm">
-          <span className="text-zinc-500">{me.user.email}</span>
+          <span className="hidden text-zinc-500 sm:inline">{me.user.email}</span>
           <a
             href="/settings"
             className="rounded-md border border-zinc-300 px-3 py-1 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
@@ -77,128 +116,117 @@ export default function HomePage() {
         </div>
       </header>
 
-      <h1 className="text-3xl font-semibold tracking-tight">Today</h1>
-      <p className="mt-1 text-sm text-zinc-500">
-        {new Date().toLocaleDateString([], {
-          weekday: "long",
-          month: "long",
-          day: "numeric",
-        })}
-      </p>
+      <section className="mb-10">
+        <p className="font-mono text-xs uppercase tracking-widest text-zinc-500">
+          {new Date().toLocaleDateString([], {
+            weekday: "long",
+            month: "long",
+            day: "numeric",
+          })}
+        </p>
+        <h1 className="mt-2 flex items-baseline gap-3 text-5xl font-semibold tracking-tight tabular-nums">
+          {remaining === null ? (
+            <span className="text-zinc-300 dark:text-zinc-700">—</span>
+          ) : (
+            <span
+              className={
+                remaining < 0
+                  ? "text-red-600 dark:text-red-400"
+                  : "text-[color:var(--color-accent)]"
+              }
+            >
+              {Math.round(remaining)}
+            </span>
+          )}
+          <span className="text-base font-normal text-zinc-500">
+            kcal {remaining !== null && remaining < 0 ? "over" : "remaining"}
+          </span>
+        </h1>
+        {targets === null || targets.calories === null ? (
+          <p className="mt-3 text-sm text-zinc-500">
+            Set your profile in{" "}
+            <a
+              href="/settings"
+              className="text-[color:var(--color-accent)] hover:underline"
+            >
+              Settings
+            </a>{" "}
+            to see your targets.
+          </p>
+        ) : null}
+      </section>
 
-      <TotalsBar
-        totals={totals}
-        caloriesBurned={caloriesBurned}
-        targets={targets}
-      />
+      <section className="mb-12 grid grid-cols-2 gap-y-8 sm:grid-cols-4">
+        <MacroRing
+          label="Calories"
+          unit="kcal"
+          value={totals.calories}
+          target={targets?.calories ?? null}
+          accent
+        />
+        <MacroRing
+          label="Protein"
+          unit="g"
+          value={totals.proteinG}
+          target={targets?.proteinG ?? null}
+        />
+        <MacroRing
+          label="Carbs"
+          unit="g"
+          value={totals.carbsG}
+          target={targets?.carbsG ?? null}
+        />
+        <MacroRing
+          label="Fat"
+          unit="g"
+          value={totals.fatG}
+          target={targets?.fatG ?? null}
+        />
+      </section>
 
-      <div className="mt-8 grid gap-6 md:grid-cols-2">
-        <MealForm onCreated={refresh} />
-        <WorkoutForm onCreated={refresh} />
-      </div>
+      <section className="mb-10">
+        <QuickChatInput />
+      </section>
 
-      <Section title="Meals">
-        {meals.length === 0 ? (
-          <Empty>Nothing logged yet.</Empty>
-        ) : (
-          <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
-            {meals.map((m) => (
-              <li
-                key={m.id}
-                className="flex items-start justify-between gap-4 py-3"
-              >
-                <div className="flex-1">
-                  <div className="flex items-baseline gap-2">
-                    <span className="font-medium">{m.description}</span>
-                    <span className="font-mono text-xs text-zinc-500">
-                      {formatTime(m.consumedAt)}
-                    </span>
-                  </div>
-                  <div className="mt-1 font-mono text-xs text-zinc-500 tabular-nums">
-                    {Math.round(m.calories)} kcal · P {m.proteinG}g · C{" "}
-                    {m.carbsG}g · F {m.fatG}g
-                  </div>
-                </div>
-                <DeleteButton
-                  onConfirm={async () => {
-                    setMeals((xs) => xs.filter((x) => x.id !== m.id));
-                    try {
-                      await api.deleteMeal(m.id);
-                    } catch (err) {
-                      console.error("deleteMeal failed", err);
-                      setError(
-                        err instanceof ApiError
-                          ? `delete meal: ${err.status} ${err.code}`
-                          : String(err),
-                      );
-                      await refresh();
-                    }
-                  }}
-                />
-              </li>
-            ))}
-          </ul>
+      <section className="mb-10">
+        <div className="mb-3 flex items-baseline justify-between">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-zinc-500">
+            Activity
+          </h2>
+          <span className="font-mono text-xs text-zinc-400 tabular-nums">
+            {meals.length + workouts.length} entries · {Math.round(totals.calories)} in · {Math.round(caloriesBurned)} out
+          </span>
+        </div>
+        <ActivityFeed
+          meals={meals}
+          workouts={workouts}
+          onDeleteMeal={deleteMeal}
+          onDeleteWorkout={deleteWorkout}
+        />
+      </section>
+
+      <section className="mt-12 border-t border-zinc-200 pt-6 dark:border-zinc-800">
+        <button
+          type="button"
+          onClick={() => setShowLogForms((s) => !s)}
+          className="text-xs font-semibold uppercase tracking-widest text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+        >
+          {showLogForms ? "Hide" : "+ Log manually"}
+        </button>
+        {showLogForms && (
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <MealForm onCreated={refresh} />
+            <WorkoutForm onCreated={refresh} />
+          </div>
         )}
-      </Section>
-
-      <Section title="Workouts">
-        {workouts.length === 0 ? (
-          <Empty>Nothing logged yet.</Empty>
-        ) : (
-          <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
-            {workouts.map((w) => (
-              <li
-                key={w.id}
-                className="flex items-start justify-between gap-4 py-3"
-              >
-                <div className="flex-1">
-                  <div className="flex items-baseline gap-2">
-                    <span className="font-medium">{w.description}</span>
-                    <span className="font-mono text-xs text-zinc-500">
-                      {formatTime(w.performedAt)}
-                    </span>
-                  </div>
-                  <div className="mt-1 font-mono text-xs text-zinc-500 tabular-nums">
-                    {Math.round(w.caloriesBurned)} kcal burned
-                    {w.durationMinutes !== null &&
-                      ` · ${w.durationMinutes} min`}
-                  </div>
-                </div>
-                <DeleteButton
-                  onConfirm={async () => {
-                    setWorkouts((xs) => xs.filter((x) => x.id !== w.id));
-                    try {
-                      await api.deleteWorkout(w.id);
-                    } catch (err) {
-                      console.error("deleteWorkout failed", err);
-                      setError(
-                        err instanceof ApiError
-                          ? `delete workout: ${err.status} ${err.code}`
-                          : String(err),
-                      );
-                      await refresh();
-                    }
-                  }}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
+      </section>
     </main>
   );
 }
 
 // ---------------------------------------------------------------------------
-// helpers
-// ---------------------------------------------------------------------------
 
-function sumMacros(meals: Meal[]): {
-  calories: number;
-  proteinG: number;
-  carbsG: number;
-  fatG: number;
-} {
+function sumMacros(meals: Meal[]) {
   return meals.reduce(
     (acc, m) => ({
       calories: acc.calories + m.calories,
@@ -210,128 +238,11 @@ function sumMacros(meals: Meal[]): {
   );
 }
 
-function TotalsBar({
-  totals,
-  caloriesBurned,
-  targets,
-}: {
-  totals: { calories: number; proteinG: number; carbsG: number; fatG: number };
-  caloriesBurned: number;
-  targets: ReturnType<typeof effectiveTargets> | null;
-}) {
-  const remaining =
-    targets && targets.calories !== null
-      ? targets.calories - totals.calories + caloriesBurned
-      : null;
+function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-2 rounded-md border border-zinc-200 bg-zinc-50 px-5 py-4 text-sm tabular-nums dark:border-zinc-800 dark:bg-zinc-900 sm:grid-cols-4">
-      <Stat
-        label="Eaten"
-        value={Math.round(totals.calories)}
-        suffix="kcal"
-        accent
-      />
-      <Stat
-        label="Burned"
-        value={Math.round(caloriesBurned)}
-        suffix="kcal"
-      />
-      <Stat
-        label="Remaining"
-        value={remaining === null ? "—" : Math.round(remaining)}
-        suffix="kcal"
-      />
-      <Stat
-        label="Protein"
-        value={`${Math.round(totals.proteinG)}/${
-          targets?.proteinG !== null && targets?.proteinG !== undefined
-            ? targets.proteinG
-            : "—"
-        }`}
-        suffix="g"
-      />
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  suffix,
-  accent,
-}: {
-  label: string;
-  value: number | string;
-  suffix?: string;
-  accent?: boolean;
-}) {
-  return (
-    <div>
-      <div className="text-xs uppercase tracking-widest text-zinc-500">
-        {label}
-      </div>
-      <div
-        className={
-          accent
-            ? "mt-1 text-xl font-semibold text-[color:var(--color-accent)]"
-            : "mt-1 text-xl font-semibold"
-        }
-      >
-        {value}
-        {suffix && (
-          <span className="ml-1 text-xs font-normal text-zinc-500">
-            {suffix}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="mt-10">
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-zinc-500">
-        {title}
-      </h2>
+    <main className="mx-auto flex min-h-screen max-w-2xl flex-col items-start justify-center px-6">
       {children}
-    </section>
-  );
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="rounded-md border border-dashed border-zinc-300 px-4 py-6 text-sm text-zinc-500 dark:border-zinc-700">
-      {children}
-    </p>
-  );
-}
-
-function DeleteButton({ onConfirm }: { onConfirm: () => Promise<void> }) {
-  const [busy, setBusy] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={async () => {
-        setBusy(true);
-        try {
-          await onConfirm();
-        } finally {
-          setBusy(false);
-        }
-      }}
-      disabled={busy}
-      className="text-xs text-zinc-400 hover:text-red-600 disabled:opacity-50 dark:hover:text-red-400"
-      aria-label="Delete"
-    >
-      ✕
-    </button>
+    </main>
   );
 }
 
@@ -370,9 +281,12 @@ function MealForm({ onCreated }: { onCreated: () => Promise<void> }) {
   };
 
   return (
-    <form onSubmit={onSubmit} className="rounded-md border border-zinc-200 p-4 dark:border-zinc-800">
+    <form
+      onSubmit={onSubmit}
+      className="rounded-md border border-zinc-200 p-4 dark:border-zinc-800"
+    >
       <h3 className="text-xs font-semibold uppercase tracking-widest text-zinc-500">
-        Log a meal
+        Meal
       </h3>
       <input
         required
@@ -396,9 +310,7 @@ function MealForm({ onCreated }: { onCreated: () => Promise<void> }) {
           {busy ? "Saving…" : "Add meal"}
         </button>
         {error && (
-          <span className="text-xs text-red-600 dark:text-red-400">
-            {error}
-          </span>
+          <span className="text-xs text-red-600 dark:text-red-400">{error}</span>
         )}
       </div>
     </form>
@@ -434,9 +346,12 @@ function WorkoutForm({ onCreated }: { onCreated: () => Promise<void> }) {
   };
 
   return (
-    <form onSubmit={onSubmit} className="rounded-md border border-zinc-200 p-4 dark:border-zinc-800">
+    <form
+      onSubmit={onSubmit}
+      className="rounded-md border border-zinc-200 p-4 dark:border-zinc-800"
+    >
       <h3 className="text-xs font-semibold uppercase tracking-widest text-zinc-500">
-        Log a workout
+        Workout
       </h3>
       <input
         required
@@ -466,9 +381,7 @@ function WorkoutForm({ onCreated }: { onCreated: () => Promise<void> }) {
           {busy ? "Saving…" : "Add workout"}
         </button>
         {error && (
-          <span className="text-xs text-red-600 dark:text-red-400">
-            {error}
-          </span>
+          <span className="text-xs text-red-600 dark:text-red-400">{error}</span>
         )}
       </div>
     </form>
@@ -494,31 +407,5 @@ function NumInput({
       placeholder={placeholder}
       className="w-full rounded-md border border-zinc-300 bg-white px-2 py-2 text-sm tabular-nums dark:border-zinc-700 dark:bg-zinc-900"
     />
-  );
-}
-
-function Centered({
-  children,
-  muted,
-  danger,
-}: {
-  children: React.ReactNode;
-  muted?: boolean;
-  danger?: boolean;
-}) {
-  return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col items-start justify-center px-6">
-      <p
-        className={
-          danger
-            ? "text-red-600 dark:text-red-400"
-            : muted
-              ? "text-zinc-500"
-              : ""
-        }
-      >
-        {children}
-      </p>
-    </main>
   );
 }
