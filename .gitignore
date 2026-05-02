@@ -30,6 +30,3 @@ packages/db/drizzle/meta/_journal.json.bak
 coverage/
 *.pyc
 __pycache__/
-macrosMVP_phase1.md
-DEPLOY.md
-tasks/todo.md
