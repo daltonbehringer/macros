@@ -10,7 +10,7 @@ providers = ["node"]
 nixPkgs = ["nodejs_22", "corepack"]
 
 [phases.install]
-cmds = ["corepack enable", "corepack prepare pnpm@9.12.3 --activate", "pnpm install --frozen-lockfile"]
+cmds = ["corepack enable", "corepack prepare pnpm@9.12.3 --activate", "NODE_ENV=development pnpm install --frozen-lockfile"]
 
 [phases.build]
 cmds = ["pnpm --filter @macros/api build"]
