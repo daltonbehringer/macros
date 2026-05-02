@@ -1,6 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { forUser, schema, type DbHandle } from "@macros/db";
-import { and, desc, gte, lt } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, lt } from "drizzle-orm";
 import { z } from "zod";
 
 /**
@@ -42,6 +42,29 @@ const GetDailySummaryInput = z.object({
 
 const GetRecentMealsInput = z.object({
   days: z.number().int().min(1).max(14).default(3),
+});
+
+const SaveRecipeInput = z.object({
+  name: z.string().min(1).max(200),
+  description: z.string().max(2000).optional(),
+  ingredients: z
+    .array(z.object({ name: z.string(), quantity: z.string() }))
+    .optional(),
+  calories_per_serving: z.number().nonnegative(),
+  protein_g: z.number().nonnegative(),
+  carbs_g: z.number().nonnegative(),
+  fat_g: z.number().nonnegative(),
+  servings: z.number().positive().default(1),
+});
+
+const GetRecipesInput = z.object({
+  query: z.string().max(200).optional(),
+});
+
+const LogMealFromRecipeInput = z.object({
+  recipe_id: z.string().uuid(),
+  servings: z.number().positive(),
+  consumed_at: z.string().datetime().optional(),
 });
 
 export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
@@ -113,6 +136,78 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
       required: [],
     },
   },
+  {
+    name: "save_recipe",
+    description:
+      "Save a recipe the user describes so they can log it later in one step. Use when the user says something like 'save this as my usual breakfast' or 'remember this recipe'. Provide per-serving macros — if the user gave totals for the whole batch, divide by servings before saving.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        description: { type: "string" },
+        ingredients: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              quantity: { type: "string" },
+            },
+            required: ["name", "quantity"],
+          },
+        },
+        calories_per_serving: { type: "number" },
+        protein_g: { type: "number", description: "Per serving." },
+        carbs_g: { type: "number", description: "Per serving." },
+        fat_g: { type: "number", description: "Per serving." },
+        servings: {
+          type: "number",
+          description:
+            "How many servings the full recipe makes. Defaults to 1 if not specified.",
+        },
+      },
+      required: [
+        "name",
+        "calories_per_serving",
+        "protein_g",
+        "carbs_g",
+        "fat_g",
+      ],
+    },
+  },
+  {
+    name: "get_recipes",
+    description:
+      "Search the user's saved recipes. Returns id, name, per-serving macros, servings count, and ingredients. Use when the user references a recipe by name ('log my usual smoothie', 'add the chicken bowl recipe').",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description:
+            "Optional case-insensitive substring match on recipe name. Omit to list all recipes.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "log_meal_from_recipe",
+    description:
+      "Log a meal using a saved recipe, multiplying the per-serving macros by `servings`. Resolve `recipe_id` via `get_recipes` first if you don't already have it.",
+    input_schema: {
+      type: "object",
+      properties: {
+        recipe_id: { type: "string" },
+        servings: {
+          type: "number",
+          description: "How many servings of the recipe the user ate.",
+        },
+        consumed_at: { type: "string" },
+      },
+      required: ["recipe_id", "servings"],
+    },
+  },
 ];
 
 type ToolResult =
@@ -146,6 +241,24 @@ export async function executeTool(
         return {
           ok: true,
           data: await getRecentMeals(GetRecentMealsInput.parse(input), ctx),
+        };
+      case "save_recipe":
+        return {
+          ok: true,
+          data: await saveRecipe(SaveRecipeInput.parse(input), ctx),
+        };
+      case "get_recipes":
+        return {
+          ok: true,
+          data: await getRecipes(GetRecipesInput.parse(input), ctx),
+        };
+      case "log_meal_from_recipe":
+        return {
+          ok: true,
+          data: await logMealFromRecipe(
+            LogMealFromRecipeInput.parse(input),
+            ctx,
+          ),
         };
       default:
         return { ok: false, error: `unknown tool: ${name}` };
@@ -279,5 +392,93 @@ async function getRecentMeals(
       .limit(50);
     return { days: input.days, meals: rows };
   });
+}
+
+async function saveRecipe(
+  input: z.infer<typeof SaveRecipeInput>,
+  ctx: ToolContext,
+) {
+  return forUser(ctx.db, ctx.userId, async (tx) => {
+    const inserted = await tx
+      .insert(schema.recipes)
+      .values({
+        userId: ctx.userId,
+        name: input.name,
+        description: input.description ?? null,
+        ingredients: input.ingredients ?? [],
+        caloriesPerServing: input.calories_per_serving,
+        proteinG: input.protein_g,
+        carbsG: input.carbs_g,
+        fatG: input.fat_g,
+        servings: input.servings,
+        createdBy: "llm",
+      })
+      .returning();
+    return inserted[0];
+  });
+}
+
+async function getRecipes(
+  input: z.infer<typeof GetRecipesInput>,
+  ctx: ToolContext,
+) {
+  return forUser(ctx.db, ctx.userId, async (tx) => {
+    const where = input.query
+      ? ilike(schema.recipes.name, `%${input.query}%`)
+      : undefined;
+    const rows = await tx
+      .select({
+        id: schema.recipes.id,
+        name: schema.recipes.name,
+        description: schema.recipes.description,
+        servings: schema.recipes.servings,
+        calories_per_serving: schema.recipes.caloriesPerServing,
+        protein_g: schema.recipes.proteinG,
+        carbs_g: schema.recipes.carbsG,
+        fat_g: schema.recipes.fatG,
+        ingredients: schema.recipes.ingredients,
+      })
+      .from(schema.recipes)
+      .where(where)
+      .orderBy(asc(schema.recipes.name))
+      .limit(50);
+    return { query: input.query ?? null, recipes: rows };
+  });
+}
+
+async function logMealFromRecipe(
+  input: z.infer<typeof LogMealFromRecipeInput>,
+  ctx: ToolContext,
+) {
+  return forUser(ctx.db, ctx.userId, async (tx) => {
+    const recipeRows = await tx
+      .select()
+      .from(schema.recipes)
+      .where(eq(schema.recipes.id, input.recipe_id))
+      .limit(1);
+    const recipe = recipeRows[0];
+    if (!recipe) throw new Error("recipe_not_found");
+
+    const factor = input.servings;
+    const inserted = await tx
+      .insert(schema.meals)
+      .values({
+        userId: ctx.userId,
+        description: `${recipe.name} (${input.servings} ${input.servings === 1 ? "serving" : "servings"})`,
+        calories: round1(recipe.caloriesPerServing * factor),
+        proteinG: round1(recipe.proteinG * factor),
+        carbsG: round1(recipe.carbsG * factor),
+        fatG: round1(recipe.fatG * factor),
+        consumedAt: input.consumed_at ? new Date(input.consumed_at) : new Date(),
+        source: "recipe",
+        recipeId: recipe.id,
+      })
+      .returning();
+    return inserted[0];
+  });
+}
+
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
 }
 

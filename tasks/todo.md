@@ -86,11 +86,12 @@ Sequencing follows the spec's build order with concrete checkable items. Each se
 - [x] Dashboard `QuickChatInput` wired — submission triggers refresh of meals/workouts when tools logged anything
 - [x] Rolling 30-day cleanup runs on every chat send (cheap, scoped to current user)
 
-## Step 7 — Recipes (PR 8)
+## Step 7 — Recipes (PR 8) ✅
 
-- [ ] `/recipes` list/create/edit/delete UI
-- [ ] LLM `save_recipe` and `get_recipes` tools wired
-- [ ] Recipe → meal logging path (multiply by servings)
+- [x] `/recipes` page: search, create/edit modal, delete, "Log this" modal with live macro preview
+- [x] LLM tools: `save_recipe`, `get_recipes`, `log_meal_from_recipe` (multiplies per-serving macros by servings, sets `source: "recipe"`)
+- [x] Manual logging path: `POST /recipes/:id/log` mirrors the LLM tool's math
+- [x] Header links to /recipes from the dashboard
 
 ## Step 8 — History + charts (PR 9)
 
@@ -230,6 +231,23 @@ Web:
 - 30-day cleanup runs synchronously on every `POST /chat` for the current user only. Cheap with the user_id index, but if traffic ramps, hoist to a cron job in PR 11.
 - The chat loop persists only the final assistant text + tool-call jsonb. The intermediate tool_use/tool_result blocks are NOT persisted — replaying a session with Anthropic would need a re-fetch of context, but our system prompt re-grounds totals each turn so that's fine.
 - Loop cap is 8 iterations. If a model gets stuck looping (e.g. hallucinated tool name), it errors out; we surface 502 to the client.
+
+### PR 8 — Recipes (2026-05-02)
+
+**What landed.** `apps/api/src/recipes/routes.ts` — full CRUD plus `POST /recipes/:id/log` for manual recipe logging. All routes go through `forUser()`. The shared schemas in `packages/shared/src/schemas/recipes.ts` were rewritten to camelCase and gained `CreateRecipeInput` / `UpdateRecipeInput`. Three new chat tools in `apps/api/src/chat/tools.ts`: `save_recipe` (createdBy: "llm"), `get_recipes` (substring search on name), `log_meal_from_recipe` (server-side servings × per-serving macros, inserts a meal with `source: "recipe"` and `recipe_id` set).
+
+Web side: `apps/web/lib/api.ts` got `listRecipes`, `createRecipe`, `updateRecipe`, `deleteRecipe`, `logRecipe`. `apps/web/app/recipes/page.tsx` is the recipes UI: search, card grid, create/edit modal with one-line-per-ingredient textarea (`name | quantity` syntax), live macro preview in the log modal, optimistic delete. The "llm" badge marks recipes saved by the assistant. Dashboard header now has a `Recipes` link.
+
+**Verified.**
+- `pnpm typecheck` — all 4 packages clean.
+- `pnpm --filter @macros/db test` — 12/12 still green.
+- All 5 new routes return 401 without a session cookie.
+
+**Watch.**
+- Both the manual `POST /recipes/:id/log` and the LLM `log_meal_from_recipe` tool implement the same multiplication. They share `round1()` but the function is duplicated across `recipes/routes.ts` and `chat/tools.ts`. If a third caller appears, hoist this into a `recipes/log.ts` helper.
+- The ingredients textarea uses `name | quantity` per line. Save/load round-trips faithfully but loses any structure beyond two fields. Fine for MVP; swap to a proper repeater if users want more shape (servings size, calories per ingredient, etc.).
+- Recipe delete is hard delete — meals previously logged via that recipe keep their copied macros (description includes the recipe name), and `meal.recipe_id` is set to NULL by the FK's `ON DELETE SET NULL`. Worth confirming the home activity feed still renders those orphaned meal rows correctly.
+- The chat system prompt does NOT mention recipes explicitly. Add a "Use saved recipes when the user references a meal by name" hint to `STABLE_PROMPT` if the model under-uses `get_recipes` in practice.
 
 ### PR 6 — Dashboard (2026-05-01)
 

@@ -1,7 +1,10 @@
 import type {
   CreateMealInput,
+  CreateRecipeInput,
   CreateWorkoutInput,
   Meal,
+  Recipe,
+  UpdateRecipeInput,
   UpdateUserProfile,
   UserProfile,
   Workout,
@@ -105,5 +108,21 @@ export const api = {
         createdAt: string;
       }>
     >("/chat/messages"),
+  listRecipes: (q?: string) =>
+    request<Recipe[]>(`/recipes${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  createRecipe: (body: CreateRecipeInput) =>
+    request<Recipe>("/recipes", { method: "POST", body: JSON.stringify(body) }),
+  updateRecipe: (id: string, patch: UpdateRecipeInput) =>
+    request<Recipe>(`/recipes/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(patch),
+    }),
+  deleteRecipe: (id: string) =>
+    request<{ ok: true }>(`/recipes/${id}`, { method: "DELETE" }),
+  logRecipe: (id: string, servings: number) =>
+    request<Meal>(`/recipes/${id}/log`, {
+      method: "POST",
+      body: JSON.stringify({ servings }),
+    }),
 };
 
