@@ -95,7 +95,7 @@ export default function RecipesPage() {
   };
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
+    <main className="mx-auto max-w-3xl px-6 py-10 pb-24 md:pb-10">
       <header className="mb-8 flex items-center justify-between">
         <a
           href="/"

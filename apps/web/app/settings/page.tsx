@@ -10,6 +10,7 @@ import {
 } from "@macros/shared";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { api, ApiError, type Me } from "@/lib/api";
 import {
   cmToFeetInches,
@@ -93,7 +94,7 @@ export default function SettingsPage() {
   const targets = effectiveTargets(profile);
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-12">
+    <main className="mx-auto max-w-2xl px-6 py-10 pb-24 md:py-12 md:pb-12">
       <header className="mb-10 flex items-center justify-between">
         <div>
           <a
@@ -110,7 +111,22 @@ export default function SettingsPage() {
 
       <Section title="Account">
         <Row label="Email">
-          <span className="font-mono text-sm">{me.user.email}</span>
+          <span className="break-all font-mono text-sm">{me.user.email}</span>
+        </Row>
+        <Row label="Theme">
+          <ThemeToggle />
+        </Row>
+        <Row label="Sign out">
+          <button
+            type="button"
+            onClick={async () => {
+              await api.logout().catch(() => {});
+              router.replace("/login");
+            }}
+            className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+          >
+            Sign out of macros
+          </button>
         </Row>
       </Section>
 

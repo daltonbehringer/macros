@@ -5,7 +5,14 @@ import { api, ApiError, STYTCH_PUBLIC_TOKEN } from "@/lib/api";
 
 type Status = "idle" | "sending" | "sent" | "error";
 
-const STYTCH_TEST_BASE = "https://test.stytch.com/v1/public/oauth";
+/**
+ * Stytch's hosted OAuth lives at different bases per environment. Detect from
+ * the public-token prefix rather than hard-coding so a single build works for
+ * both test and live deploys.
+ */
+const STYTCH_OAUTH_BASE = STYTCH_PUBLIC_TOKEN.startsWith("public-token-live-")
+  ? "https://api.stytch.com/v1/public/oauth"
+  : "https://test.stytch.com/v1/public/oauth";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -33,7 +40,7 @@ export default function LoginPage() {
     }
     const callback = `${window.location.origin}/auth/callback`;
     const url =
-      `${STYTCH_TEST_BASE}/google/start` +
+      `${STYTCH_OAUTH_BASE}/google/start` +
       `?public_token=${encodeURIComponent(STYTCH_PUBLIC_TOKEN)}` +
       `&login_redirect_url=${encodeURIComponent(callback)}` +
       `&signup_redirect_url=${encodeURIComponent(callback)}`;

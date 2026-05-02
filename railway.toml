@@ -1,0 +1,14 @@
+# Railway service config for the API.
+#
+# Railway reads this from the repo root and combines it with nixpacks.toml
+# (build phases, install, start). The `[deploy]` section here tells Railway
+# how to operate the running container — healthcheck path, restart policy.
+
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+healthcheckPath = "/healthz"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5

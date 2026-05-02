@@ -1,0 +1,19 @@
+# Nixpacks build for the API on Railway.
+#
+# The repo is a pnpm workspace; Railway points its service at this repo and
+# runs from the root. We need pnpm available at install time; corepack
+# ships with Node 20+ and `pnpm` resolves via packageManager in package.json.
+
+providers = ["node"]
+
+[phases.setup]
+nixPkgs = ["nodejs_22", "corepack"]
+
+[phases.install]
+cmds = ["corepack enable", "corepack prepare pnpm@9.12.3 --activate", "pnpm install --frozen-lockfile"]
+
+[phases.build]
+cmds = ["pnpm --filter @macros/api build"]
+
+[start]
+cmd = "pnpm --filter @macros/db db:migrate && pnpm --filter @macros/api start"

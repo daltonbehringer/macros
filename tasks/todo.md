@@ -100,20 +100,25 @@ Sequencing follows the spec's build order with concrete checkable items. Each se
 - [x] Server aggregates per-day in the user's TZ via `(consumed_at AT TIME ZONE tz)::date`; client renders zero-filled rows for missing days
 - [x] Tabular-nums tooltips, dark-themed tooltip surface, accent color on hero metrics
 
-## Step 9 — Polish (PR 10)
+## Step 9 — Polish (PR 10) ✅
 
-- [ ] Mobile responsive pass — test at 375px, bottom nav bar
-- [ ] Dark mode pass — every screen, both themes
-- [ ] Typography: Geist + Geist Mono via `next/font`
-- [ ] Pick + apply accent color (proposing electric green; confirm before applying)
+- [x] Geist + Geist Mono via `next/font/google` — variables `--font-geist` / `--font-geist-mono` flow into Tailwind v4's `@theme` font tokens
+- [x] No-flash theme script in `<head>` reads `localStorage('theme')` then falls back to system preference; sets `class="dark"` on `<html>` before React hydrates
+- [x] `ThemeToggle` (light / system / dark) on Settings; system mode tracks `prefers-color-scheme`
+- [x] `BottomNav` component (Today / Chat / Recipes / History / Settings) — `md:hidden`, hidden on `/login`, `/auth/callback`, `/chat`
+- [x] Header link rows are `hidden md:flex`; mobile shows just the macros logo + email→/settings shortcut
+- [x] Every protected page has `pb-24 md:pb-10` to clear the fixed bottom nav
+- [x] Sign out moved into Settings (was previously only in dashboard header)
+- [x] Accent stays at `#00e08a` electric green (chosen in PR 1, validated in browser)
 
-## Step 10 — Deploy (PR 11)
+## Step 10 — Deploy (PR 11) ✅ (codebase ready; cloud setup is your action)
 
-- [ ] Vercel project: root `apps/web`, env vars per environment
-- [ ] Railway: service for `apps/api` + Postgres add-on, dev + prod environments
-- [ ] Stytch: Test keys for dev/preview, Live keys for prod
-- [ ] DNS: `macros.dalty.io` → Vercel; CORS allowlist on api
-- [ ] Smoke test: register → log meal via chat → see on dashboard, in prod
+- [x] Codebase production-ready: tsx-based prod runtime, `/healthz` with DB ping, trustProxy enabled in prod, secure cookies in prod, optional `COOKIE_DOMAIN`
+- [x] Vercel rewrite `/api/*` → Railway target (same-origin proxy — no CORS, no cross-domain cookies)
+- [x] Stytch OAuth base detected from public-token prefix (test vs live)
+- [x] Platform configs: [`apps/web/vercel.json`](apps/web/vercel.json), root [`railway.toml`](railway.toml) + [`nixpacks.toml`](nixpacks.toml)
+- [x] Deploy runbook: [`DEPLOY.md`](DEPLOY.md) — Railway setup, Vercel setup, DNS, Stytch live config, smoke tests, common ops
+- [ ] **Your action**: provision Railway + Vercel projects, point DNS, configure Stytch Live, run the smoke test in [DEPLOY.md §5](DEPLOY.md)
 
 ## Non-negotiables (re-check every PR)
 
@@ -264,6 +269,53 @@ Web: `apps/web/lib/api.ts` got `getHistory()` and a typed `HistoryResponse`. `ap
 - Net-vs-target chart hides if no calorie target is set (replaces the chart body with the Settings link). Macro net comparisons could follow the same model later.
 - The `MAX_RANGE_DAYS = 366` cap exists for safety; bumping it requires verifying Recharts doesn't choke on >1000 data points (right now the grid rendering is fine to ~120).
 - Targets in the response are *base* targets (no workout-burn bonus). For per-day budget visualization that accounts for that day's workouts, do the math client-side per row.
+
+### PR 10 — Polish (2026-05-02)
+
+**What landed.**
+- `apps/web/app/layout.tsx`: Geist + Geist Mono via `next/font/google` (variables flow through `--font-geist` / `--font-geist-mono`), inline no-flash theme script, body `font-sans` applied. `<html suppressHydrationWarning>` so the manual class toggle doesn't trigger React's mismatch warning.
+- `apps/web/app/globals.css`: Tailwind v4 `@variant dark (&:where(.dark, .dark *))` so `dark:` modifiers respond to the class toggle (not just `prefers-color-scheme`). Reset color-scheme handling: light by default, `.dark` flips it.
+- `apps/web/components/BottomNav.tsx`: fixed bottom nav with five icons (Today / Chat / Recipes / History / Settings), `md:hidden`, returns null on `/login`, `/auth/callback`, `/chat`. Inline SVG icons, no extra dep. Active route in accent color.
+- `apps/web/components/ThemeToggle.tsx`: light / system / dark toggle group; system mode removes the storage key and reads `prefers-color-scheme`. Wired into Settings.
+- Page-level: every protected page now has `pb-24 md:pb-10` to clear the fixed nav. Header link rows on the dashboard collapse to a logo + email-shortcut on mobile (the bottom nav owns navigation). Sign out moved to Settings.
+
+**Verified.** All 4 packages typecheck. SSR on `/login` shows the inline theme script in `<head>`, `font-sans` body class, and the next/font CSS-variable classnames on `<html>`. SSR on `/` includes the BottomNav with `md:hidden` + `inset-x-0 bottom-0` markers (so it shows on mobile and hides at md+).
+
+**Watch.**
+- Tailwind v4 dropped the implicit `darkMode: 'class'` config in favor of explicit `@variant`. The directive in `globals.css` is the single source of truth; if you add another stylesheet, repeat the variant declaration there.
+- The no-flash theme script depends on `localStorage` and `matchMedia` being defined synchronously at first paint. SSR renders without the `dark` class — the script fires immediately on hydration to add it. The `suppressHydrationWarning` on `<html>` is needed for this exact reason; don't remove it.
+- BottomNav uses `<a href>` not `<Link>` — full page transitions, but simpler. Swap to `next/link` if route prefetching matters once the app is live.
+- The mobile dashboard header truncates the email link aggressively. On very long emails the click target gets tiny; consider replacing with an avatar circle later.
+- `/chat` opts out of BottomNav. That means the only mobile escape is the `← macros` link in its header. If users get lost there, add the BottomNav back with a higher input z-index.
+
+### PR 11 — Deploy (2026-05-02)
+
+**What landed.** Production-ready codebase + the platform configuration to deploy it:
+
+- API runtime simplified to `tsx src/index.ts` — no separate `tsc` build step, no `dist/`. Cold-start is fast enough for an MVP, and it removes the monorepo "what gets bundled" question.
+- `/healthz` route in [server.ts](apps/api/src/server.ts) executes `select 1` through the DB pool; Railway uses it for healthchecks. `/health` remains for liveness-only checks.
+- Fastify boots with `trustProxy: true` in production so request IP and protocol come from `X-Forwarded-*` headers rather than the inner Railway socket.
+- Cookies: `secure` flips on in production. `Domain` attribute is now opt-in via the new optional `COOKIE_DOMAIN` env (leave unset behind a same-origin proxy).
+- `apps/web/next.config.ts` rewrites `/api/:path*` to `process.env.API_PROXY_TARGET` when set. With `NEXT_PUBLIC_API_URL=/api` in Vercel, the browser sees one origin (`macros.dalty.io`) — no CORS, no cross-domain cookie config.
+- Stytch OAuth base URL is now detected from the `public-token-live-` vs `public-token-test-` prefix in [login/page.tsx](apps/web/app/login/page.tsx). One build, both environments.
+- [`apps/web/vercel.json`](apps/web/vercel.json) sets the install + build commands so Vercel handles the pnpm monorepo correctly. Root directory is `apps/web`.
+- [`railway.toml`](railway.toml) + [`nixpacks.toml`](nixpacks.toml) at the repo root. Nixpacks installs corepack-pinned pnpm, runs `pnpm install --frozen-lockfile`, then on start runs `pnpm --filter @macros/db db:migrate && pnpm --filter @macros/api start`. Migrations run on every deploy.
+- [`DEPLOY.md`](DEPLOY.md) is the full runbook: prereqs, Railway setup with env vars, Vercel setup with rewrite + env vars, DNS for `macros.dalty.io`, Stytch live config, end-to-end smoke test, common ops (manual migration, log tailing, rollback).
+
+**Verified.**
+- `pnpm typecheck` clean across 4 packages.
+- `pnpm --filter @macros/db test` — 12/12 still green.
+- `/login` SSRs 200 in dev.
+- `/healthz` returns 200 with `{status:"ok",db:"ok"}`.
+
+**Watch.**
+- Migrations run on every deploy. They're additive and idempotent today, but a destructive migration would run automatically. If a future migration drops a column or rewrites data, gate it behind a manual one-shot job (Railway → Run command → `pnpm --filter @macros/db db:migrate`) and remove the auto-run from `nixpacks.toml`.
+- The Vercel rewrite means Vercel's edge fronts every API call. Vercel function execution time counts toward your plan; for hot endpoints with high QPS, consider giving the API a public hostname (`api.macros.dalty.io` CNAME directly to Railway) and dropping the rewrite.
+- Stytch redirect URLs must be configured in **both** projects (Test + Live) before the corresponding deploy can authenticate. The Test project still drives previews and dev.
+- `SESSION_SECRET` rotation: documented in DEPLOY.md, but worth saying again — it invalidates every active session cookie. Plan a rotation when traffic is low.
+- `COOKIE_DOMAIN` is unset by default. If you ever move to a separate `api.macros.dalty.io` (no rewrite), set this to `.macros.dalty.io` so the cookie is shared across the apex and api subdomains. Otherwise leave it.
+- Railway's Postgres add-on creates the `macros` superuser by default. Migration `0002_app_role.sql` creates the non-super `app_user` role idempotently — verify it ran by checking `pg_roles` (instructions in DEPLOY.md §1.8).
+- Anthropic SDK uses one API key for all environments. If you want billing visibility per env, create separate Anthropic workspaces and rotate the key in each Railway environment.
 
 ### PR 6 — Dashboard (2026-05-01)
 

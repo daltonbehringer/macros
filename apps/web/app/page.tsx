@@ -91,16 +91,16 @@ export default function HomePage() {
   };
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-10">
-      <header className="mb-10 flex items-center justify-between">
+    <main className="mx-auto max-w-4xl px-6 py-8 pb-24 md:py-10 md:pb-10">
+      <header className="mb-8 flex items-center justify-between md:mb-10">
         <a
           href="/"
           className="font-mono text-xs uppercase tracking-widest text-zinc-500"
         >
           macros
         </a>
-        <div className="flex items-center gap-3 text-sm">
-          <span className="hidden text-zinc-500 sm:inline">{me.user.email}</span>
+        <div className="hidden items-center gap-3 text-sm md:flex">
+          <span className="text-zinc-500">{me.user.email}</span>
           <a
             href="/history"
             className="rounded-md border border-zinc-300 px-3 py-1 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
@@ -126,6 +126,13 @@ export default function HomePage() {
             Sign out
           </button>
         </div>
+        <a
+          href="/settings"
+          className="text-xs text-zinc-500 md:hidden"
+          aria-label="Settings"
+        >
+          {me.user.email}
+        </a>
       </header>
 
       <section className="mb-10">

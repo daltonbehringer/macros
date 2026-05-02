@@ -1,8 +1,10 @@
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
+import { sql } from "drizzle-orm";
 import Fastify from "fastify";
 import { authRoutes } from "./auth/routes";
 import { chatRoutes } from "./chat/routes";
+import { getDb } from "./db";
 import { historyRoutes } from "./history/routes";
 import { mealRoutes } from "./meals/routes";
 import { profileRoutes } from "./profile/routes";
@@ -19,6 +21,9 @@ export function buildServer() {
           ? { target: "pino-pretty", options: { colorize: true } }
           : undefined,
     },
+    // Trust the Vercel / Railway proxy in front of us so request.ip and
+    // protocol come from X-Forwarded-* headers rather than the inner socket.
+    trustProxy: env.NODE_ENV === "production",
   });
 
   app.register(cookie, { secret: env.SESSION_SECRET });
@@ -32,6 +37,20 @@ export function buildServer() {
     env: env.NODE_ENV,
     time: new Date().toISOString(),
   }));
+
+  /**
+   * Liveness + DB connectivity check. Railway's healthcheck hits this and
+   * recycles the container if it fails.
+   */
+  app.get("/healthz", async (_req, reply) => {
+    try {
+      const { db } = getDb();
+      await db.execute(sql`select 1`);
+      return { status: "ok", db: "ok" };
+    } catch (err) {
+      reply.code(503).send({ status: "degraded", db: "error" });
+    }
+  });
 
   app.register(authRoutes);
   app.register(profileRoutes);
