@@ -18,3 +18,20 @@ export function formatTime(iso: string): string {
     minute: "2-digit",
   });
 }
+
+/** YYYY-MM-DD in browser-local TZ (used by the chat backend for "today"). */
+export function todayLocal(now = new Date()): string {
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/** Friday, May 1 — for prompt rendering. */
+export function todayLabel(now = new Date()): string {
+  return now.toLocaleDateString([], {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+}

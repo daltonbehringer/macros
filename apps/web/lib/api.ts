@@ -84,4 +84,26 @@ export const api = {
     }),
   deleteWorkout: (id: string) =>
     request<{ ok: true }>(`/workouts/${id}`, { method: "DELETE" }),
+  sendChat: (body: {
+    message: string;
+    todayLocal: string;
+    todayLabel: string;
+    dayStartUtc: string;
+    dayEndUtc: string;
+  }) =>
+    request<{
+      reply: string;
+      toolCalls: Array<{ name: string; input: unknown; result: unknown }>;
+      usage: { input: number; output: number; cacheRead: number; cacheWrite: number };
+    }>("/chat", { method: "POST", body: JSON.stringify(body) }),
+  listChatMessages: () =>
+    request<
+      Array<{
+        id: string;
+        role: "user" | "assistant";
+        content: string;
+        createdAt: string;
+      }>
+    >("/chat/messages"),
 };
+

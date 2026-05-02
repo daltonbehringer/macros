@@ -2,6 +2,7 @@ import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import Fastify from "fastify";
 import { authRoutes } from "./auth/routes";
+import { chatRoutes } from "./chat/routes";
 import { mealRoutes } from "./meals/routes";
 import { profileRoutes } from "./profile/routes";
 import { workoutRoutes } from "./workouts/routes";
@@ -34,6 +35,7 @@ export function buildServer() {
   app.register(profileRoutes);
   app.register(mealRoutes);
   app.register(workoutRoutes);
+  app.register(chatRoutes);
 
   return app;
 }

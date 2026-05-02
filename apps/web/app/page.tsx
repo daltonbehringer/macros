@@ -185,7 +185,7 @@ export default function HomePage() {
       </section>
 
       <section className="mb-10">
-        <QuickChatInput />
+        <QuickChatInput onAfterReply={refresh} />
       </section>
 
       <section className="mb-10">

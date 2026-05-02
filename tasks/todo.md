@@ -75,15 +75,16 @@ Sequencing follows the spec's build order with concrete checkable items. Each se
 - [x] Manual log forms moved behind a "+ Log manually" toggle so they stay accessible while not dominating the dashboard
 - [x] `tabular-nums` on every number that displays
 
-## Step 6 — LLM chat with tool use (PR 7)
+## Step 6 — LLM chat with tool use (PR 7) ✅
 
-- [ ] Tools: `log_meal`, `log_workout`, `get_daily_summary`, `get_recent_meals`, `save_recipe`, `get_recipes`
-- [ ] Anthropic SDK with current model (verify latest at runtime — likely `claude-sonnet-4-5` or successor)
-- [ ] System prompt template includes: today's date (in user TZ), daily targets, today's running totals, last 7 days of meals, METs reference for workout sanity-check
-- [ ] Tool-use loop: execute tools server-side, append `tool_result`, loop until plain text
-- [ ] Persist user message + tool calls + assistant message to `chat_messages`
-- [ ] `/chat` page (full screen on mobile, drawer on desktop)
-- [ ] Cleanup job: delete `chat_messages` older than 30 days (cron via Railway scheduled job, or on-write trim)
+- [x] Four tools wired: `log_meal`, `log_workout`, `get_daily_summary`, `get_recent_meals`. (`save_recipe`/`get_recipes` deferred to PR 8 alongside the recipes UI.)
+- [x] Anthropic SDK 0.92, model `claude-sonnet-4-6` with `thinking: {type: "adaptive"}` and `effort: "high"`
+- [x] System prompt split into stable prefix (cached via `cache_control: ephemeral`) and volatile tail (today's date, targets, totals, last 7 days of meals, METs reference)
+- [x] Tool-use loop with 8-iteration cap, executes tools via `forUser()` so RLS applies, returns final text + audit log
+- [x] Persists user + assistant turns to `chat_messages` (tool calls stored as jsonb on assistant row)
+- [x] `/chat` full-screen page with optimistic user bubble, Enter-to-send, scroll-to-bottom
+- [x] Dashboard `QuickChatInput` wired — submission triggers refresh of meals/workouts when tools logged anything
+- [x] Rolling 30-day cleanup runs on every chat send (cheap, scoped to current user)
 
 ## Step 7 — Recipes (PR 8)
 
@@ -207,6 +208,28 @@ Web side: `apps/web/lib/api.ts` got `listMeals` / `createMeal` / `deleteMeal` an
 - The home page is intentionally functional-not-pretty. PR 6 (Dashboard) replaces this layout with macro rings, hero numbers, recent activity feed; the data plumbing here should mostly survive that swap.
 - `formatTime` uses `toLocaleTimeString([], …)` — picks up the browser's locale + TZ. Once `profile.timezone` is reliably populated, switch to `{ timeZone: profile.timezone }` so the rendering matches across devices.
 - Optimistic delete falls back to `refresh()` on error, so a network blip restores state. No toast yet — silent recovery is fine for MVP, revisit when adding error UX globally.
+
+### PR 7 — LLM chat with tool use (2026-05-01)
+
+**What landed.** `apps/api/src/chat/`:
+- [`anthropic.ts`](apps/api/src/chat/anthropic.ts) — singleton SDK client + model/effort/max-tokens constants.
+- [`tools.ts`](apps/api/src/chat/tools.ts) — four tool definitions (`log_meal`, `log_workout`, `get_daily_summary`, `get_recent_meals`) with zod input schemas; executor map runs each through `forUser()` so RLS applies.
+- [`systemPrompt.ts`](apps/api/src/chat/systemPrompt.ts) — `STABLE_PROMPT` (identity, behavior rules, METs reference) split from a per-turn volatile tail (today's date / targets / totals / recent meals).
+- [`loop.ts`](apps/api/src/chat/loop.ts) — tool-use loop with 8-iteration cap. Sends `system` as two text blocks with `cache_control: {type: "ephemeral"}` on the stable one so it caches across turns. Sums usage across iterations.
+- [`routes.ts`](apps/api/src/chat/routes.ts) — `POST /chat` (sweep > 30 days, gather context, run loop, persist user + assistant rows) and `GET /chat/messages` (recent 200).
+
+Web:
+- [`QuickChatInput`](apps/web/components/QuickChatInput.tsx) submits to `/chat`, shows the reply inline, and triggers `onAfterReply` so the dashboard refreshes when tools logged anything. Adds a "full chat →" link.
+- [`/chat` page](apps/web/app/chat/page.tsx) — full-screen conversation with optimistic user bubble, Enter-to-send, scroll-to-bottom on new messages.
+
+**Verified.** All 4 packages typecheck (turbo). `POST /chat` and `GET /chat/messages` both 401 without a session cookie. Real Anthropic round-trip needs a logged-in browser test.
+
+**Watch.**
+- The system prompt has a stable prefix + a volatile tail. The volatile tail changes every turn (totals, recent meals), but the stable prefix should hit the cache. Verify with `cache_read_input_tokens` in the response usage when testing — if it's zero across consecutive turns, something is invalidating (e.g. a timestamp leaking into `STABLE_PROMPT`).
+- Tool input keys are snake_case to match the input_schema (`protein_g`, `consumed_at`). Drizzle inserts use camelCase. The `executeTool` map handles the bridge — keep them in sync if you add a new tool.
+- 30-day cleanup runs synchronously on every `POST /chat` for the current user only. Cheap with the user_id index, but if traffic ramps, hoist to a cron job in PR 11.
+- The chat loop persists only the final assistant text + tool-call jsonb. The intermediate tool_use/tool_result blocks are NOT persisted — replaying a session with Anthropic would need a re-fetch of context, but our system prompt re-grounds totals each turn so that's fine.
+- Loop cap is 8 iterations. If a model gets stuck looping (e.g. hallucinated tool name), it errors out; we surface 502 to the client.
 
 ### PR 6 — Dashboard (2026-05-01)
 
