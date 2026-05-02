@@ -3,7 +3,6 @@ import { eq } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { getDb } from "../db";
-import { env } from "../env";
 import { SESSION_COOKIE, sessionCookieOptions } from "./cookie";
 import { requireAuth } from "./middleware";
 import { findOrCreateUser } from "./provision";
@@ -14,7 +13,17 @@ import {
   sendMagicLink,
 } from "./stytch";
 
-const SendBody = z.object({ email: z.string().email() });
+const SendBody = z.object({
+  email: z.string().email(),
+  /**
+   * The browser's origin (e.g. `https://macros.dalty.io`). Sent by the client
+   * so the magic-link callback URL matches the page the user is actually on,
+   * which can differ from the API's deployment context (Vercel preview URLs,
+   * custom domains, localhost). Stytch rejects mismatches via its redirect
+   * URL allowlist, which is the actual security gate.
+   */
+  origin: z.string().url(),
+});
 const AuthenticateBody = z.object({
   token: z.string().min(1),
   type: z.enum(["magic_links", "oauth"]),
@@ -27,7 +36,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       reply.code(400).send({ error: "invalid_email" });
       return;
     }
-    const callbackUrl = `${env.CORS_ORIGIN.split(",")[0]}/auth/callback`;
+    const callbackUrl = `${parsed.data.origin.replace(/\/$/, "")}/auth/callback`;
     try {
       await sendMagicLink({ email: parsed.data.email, callbackUrl });
     } catch (err) {

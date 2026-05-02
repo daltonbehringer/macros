@@ -53,7 +53,7 @@ export const api = {
   sendMagicLink: (email: string) =>
     request<{ ok: true }>("/auth/magic-link/send", {
       method: "POST",
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email, origin: window.location.origin }),
     }),
   authenticate: (token: string, type: "magic_links" | "oauth") =>
     request<{ user: { id: string; email: string } }>("/auth/authenticate", {
