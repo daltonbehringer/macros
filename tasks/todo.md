@@ -1,6 +1,58 @@
-# Macros MVP — Phase 1 Build Plan
+# Macros MVP — Build Plan
 
 Sequencing follows the spec's build order with concrete checkable items. Each section is roughly one PR.
+
+> **Phase 1** is complete (PRs 1–11, see Review section). **Phase 2** is the pre-launch slate: dev/prod environment split, then a sequenced PR backlog (landing page → onboarding → analytics → PWA → chat quota → error tracking → weekly email).
+
+---
+
+## Phase 2 — Dev/prod split + pre-launch PRs
+
+### Step 0 — Clean dev/prod environments (PR 12) ⏳
+
+Decisions (confirmed with user 2026-05-02):
+- Vercel: long-running `develop` branch, aliased to `dev.macros.dalty.io`
+- Migrations: auto-run on dev (current behavior), **manual** on prod (override Railway start command)
+- Railway dev env named `dev`
+- Stytch: keep Test for both dev + prod until launch; defer Live setup
+
+Tasks:
+- [ ] Create local `develop` branch from `main`
+- [ ] Update [`nixpacks.toml`](nixpacks.toml) — keep auto-migrate as the default start (dev behavior); document prod override in DEPLOY.md
+- [ ] Rewrite [`DEPLOY.md`](DEPLOY.md) to cover dev + prod side-by-side (per-env tables, click-through for `dev` env on Railway, Vercel `develop` branch + `dev.macros.dalty.io` alias setup, Stytch redirect URL additions)
+- [ ] Add a "Migration policy" section to DEPLOY.md (auto on dev / manual on prod via Railway start-command override)
+- [ ] User actions: provision Railway `dev` env + Postgres add-on, configure Vercel `develop` branch, point `dev.macros.dalty.io` CNAME, override Railway prod start command, add dev redirect URLs to Stytch Test
+- [ ] Verify dev → vercel preview → Railway dev DB end-to-end before starting PR 13
+
+### PR 13 — Public landing page at `/`
+
+Logged-out visitors currently get pushed to `/login`. Replace with a real landing page (tagline, screenshot/animated demo, 3-step "talk → log → see", CTA → `/login`). Authenticated users still land on the dashboard. Use frontend-design skill. Geist + electric-green accent. Mobile-responsive at 375px.
+
+### PR 14 — First-run onboarding
+
+3-step inline flow when profile is empty (sex/age/activity → height/weight/units → confirmation with computed targets). Reuse Settings input components. Persists via existing `PUT /profile`.
+
+### PR 15 — Analytics (Plausible vs Vercel Analytics — TBD)
+
+Track: page views, `signup_completed`, `onboarding_completed`, `meal_logged_via_chat`, `meal_logged_manual`, `workout_logged`, `delete_account`. Document events in DEPLOY.md.
+
+### PR 16 — PWA basics
+
+`apps/web/public/manifest.json`, 192/512 icons (check git history of Python prototype or generate from accent logo), iOS/Android meta tags in `app/layout.tsx`. No service worker yet.
+
+### PR 17 — Per-user daily chat quota
+
+30 messages/day cap with soft warning at 25, hard 429 at 30. Tracked via count of `chat_messages` for the user that local day. Subtle remaining-count surface in chat UI.
+
+### PR 18 — Sentry-or-equivalent error tracking
+
+Free tier. Wire web + api. No PII (no message content, no emails — user IDs OK).
+
+### PR 19 — Weekly summary email
+
+Sunday morning. Average daily kcal, total workouts, days on/off target, simplest macro breakdown. Reuse `/history` aggregation. Resend or similar (NOT Stytch). One-click unsubscribe.
+
+---
 
 ## Resolved decisions (2026-05-01)
 
