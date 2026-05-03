@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { cookies } from "next/headers";
 import { BottomNav } from "@/components/BottomNav";
 import "./globals.css";
 
@@ -16,8 +17,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Macros",
-  description: "Conversational nutrition and calorie tracking",
+  title: "Macros — tracking, in plain language",
+  description:
+    "The food tracker that listens. Tell it what you ate; it does the math. No barcode scanner, no 800,000-item food database, no friend feed.",
 };
 
 // Inline the theme decision before React hydrates so the page never flashes
@@ -31,11 +33,14 @@ const themeScript = `(function () {
   } catch (_) {}
 })();`;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const cookieStore = await cookies();
+  const authenticated = cookieStore.has("macros_session");
+
   return (
     <html
       lang="en"
@@ -47,7 +52,7 @@ export default function RootLayout({
       </head>
       <body className="bg-white font-sans text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100">
         {children}
-        <BottomNav />
+        <BottomNav authenticated={authenticated} />
       </body>
     </html>
   );

@@ -14,8 +14,9 @@ const ITEMS = [
 // the auth flow has no nav scope.
 const HIDDEN_ON = ["/login", "/auth/callback", "/chat"];
 
-export function BottomNav() {
+export function BottomNav({ authenticated }: { authenticated: boolean }) {
   const pathname = usePathname() ?? "/";
+  if (!authenticated) return null;
   if (HIDDEN_ON.includes(pathname)) return null;
 
   return (

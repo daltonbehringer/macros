@@ -183,6 +183,62 @@ Sunday morning. Average daily kcal, total workouts, days on/off target, simplest
 
 ## Review section
 
+### PR 13 — Public landing page at `/` (2026-05-02)
+
+**What landed.** Logged-out visitors at `/` now see a real public landing page instead of being force-redirected to `/login`. Authenticated users still land on the dashboard at the same URL with no extra clicks.
+
+- [`apps/web/app/page.tsx`](apps/web/app/page.tsx) — converted from a client component to a server-component **gate**. Reads the `macros_session` cookie via `next/headers` and renders `<Dashboard />` (existing behavior) or `<Landing />` (new). No middleware, no extra route, no client flash.
+- [`apps/web/components/Dashboard.tsx`](apps/web/components/Dashboard.tsx) — extracted from the old `page.tsx`. Same logic, plus a one-line patch in the 401 catch: it now calls `api.logout()` to nuke the stale cookie before redirecting to `/login`. Without this, a stale cookie loops you back through the gate (cookie present → render Dashboard → 401 → /login → revisit / → still has cookie → ...).
+- [`apps/web/components/landing/Landing.tsx`](apps/web/components/landing/Landing.tsx) — new server component. Editorial / terminal-ish aesthetic: Geist Mono eyebrows, asymmetric grid, generous negative space, single-color accent (`--color-accent`) used sparingly and loud (hero word, CTA buttons, accent dots). Sections: nav → hero → demo → "How it works" 3 steps → anti-feature callout → final CTA → footer.
+- [`apps/web/components/landing/DashboardPreview.tsx`](apps/web/components/landing/DashboardPreview.tsx) — new. Static hard-coded mock that uses the **real** `MacroRing` component (so the preview stays in sync as the dashboard evolves). Wrapped in a CRT-styled frame: thick zinc bezel, faint accent halo behind, scanline overlay (1px lines at 7% opacity), vignette, subtle text glow on the hero remaining-kcal number, animated cursor in the faux chat input. The retro frame is the one place on the page that leans into the brand's playful side; everything else stays editorially sober.
+- [`apps/web/app/layout.tsx`](apps/web/app/layout.tsx) — became `async`, reads the same cookie, passes `authenticated` to `BottomNav`. Updated metadata `title` and `description` to the new positioning ("Tracking, in plain language", "the food tracker that listens").
+- [`apps/web/components/BottomNav.tsx`](apps/web/components/BottomNav.tsx) — accepts `authenticated` prop; returns null when unauthenticated. Auth-gated chrome shouldn't show on a public page, even on mobile.
+
+Tagline locked: **"Tracking, in plain language."** Positioning swept clean of gym-coded language ("logging" → "typing", "stop tracking" → none). Anti-feature block ("What it doesn't do — no barcode scanner, no 800,000-item database, no friend feed, no streaks, no premium tier, no ads") makes simplicity tangible by naming what's missing.
+
+**Verified.**
+- `pnpm typecheck` clean across 4 packages.
+- `curl http://localhost:3000/` (no cookie) returns HTTP 200 with the landing markup; `inset-x-0 bottom-0` (BottomNav marker) absent.
+- Local browser: landing renders cleanly in light + dark modes; mobile reflows at 375px without horizontal scroll; CRT preview block reads as intentional and not a 90s revival; dashboard post-login renders identically to before extraction.
+- Magic-link auth round-trip works locally end-to-end (after fixing an unrelated truncated `STYTCH_PROJECT_ID` in `.env.local` — see lesson).
+
+**Watch.**
+- The server gate trusts cookie *presence*, not validity. A stale `macros_session` would render the dashboard shell once before its `/me` 401s and bounces. The Dashboard now clears the cookie on 401 so the next visit is clean. If a future change adds another protected page that bypasses Dashboard's catch logic, that page also needs to clear-then-redirect or you reintroduce the loop.
+- `Dashboard.tsx` and `Landing.tsx` are completely independent — extracting Dashboard gave us a clean seam. If you swap the gate to use middleware later (e.g. for edge-side latency), the components don't move.
+- The `DashboardPreview` data is hard-coded and will drift from reality over time. That's the trade-off: real components, fake data. If the dashboard's macro math changes meaningfully, update the preview's `totals` and `targets` constants.
+- "Magic-link sign in · no password" copy under the CTA is honest now but will need to change when Google OAuth is featured equally.
+- No analytics yet — `landing_cta_clicked` and `signup_started` will land in PR 15.
+- The hero headline uses a `<br />` for its line break. On very narrow viewports (sub-360px) this looks fine; on very wide viewports the second line still feels balanced. If we ever need it more responsive, swap to `display: block` on the accent span.
+
+### PR 12 — Dev/prod split (2026-05-02)
+
+**What landed.**
+- Local `develop` branch created from `main` (post-fast-forward of `a209a1c`); will become the long-running dev target for Vercel.
+- `.gitignore` no longer hides `DEPLOY.md`, `tasks/todo.md`, `macrosMVP_phase1.md`. All three are now tracked. (`tasks/todo.md` was already tracked despite the gitignore line — gitignore doesn't affect already-tracked files.)
+- [`DEPLOY.md`](DEPLOY.md) rewritten to cover both environments side-by-side: per-env quick reference table, Railway prod + dev (each with its own Postgres), Vercel single-project pattern (Production = `main`, Preview = `develop` aliased to `dev.macros.dalty.io`), DNS for both subdomains, Stytch Test redirect URLs, and a "Migration policy" section codifying auto-on-dev / **manual-on-prod** via Railway service-level start-command override.
+- `tasks/todo.md` extended with a Phase 2 section (PR 12 + the pre-launch PR backlog 13–19).
+- Committed on `develop` as `1c57e5f`. Not pushed yet (user's call).
+
+**User actions executed (Railway / Vercel / DNS / Stytch):**
+- Railway project `accomplished-serenity`: existing env renamed to `dev` (still on `develop` branch via Source change); new `prod` env forked, Postgres add-on added separately, `macros` service pointed at `main`, `CORS_ORIGIN=https://macros.dalty.io`, fresh `SESSION_SECRET`, Custom Start Command set to `pnpm --filter @macros/api start` (no auto-migrate).
+- Initial prod migration ran via local `pnpm --filter @macros/db db:migrate` with `DATABASE_URL` overridden to the Postgres `DATABASE_PUBLIC_URL` (the internal `postgres.railway.internal` hostname doesn't resolve from local machines).
+- Prod URL `https://macros-prod.up.railway.app/healthz` returns `{"status":"ok","db":"ok"}`.
+- DNS: CNAMEs added for `macros` and `dev.macros` → `cname.vercel-dns.com`.
+- Vercel: `API_PROXY_TARGET` configured per scope (Preview → dev Railway URL; Production → prod Railway URL), `NEXT_PUBLIC_API_URL=/api` per scope, `NEXT_PUBLIC_STYTCH_PUBLIC_TOKEN` = Stytch Test token on both scopes (Live deferred). Vercel **Deployment Protection** disabled (project has its own Stytch auth, no need for an extra wall).
+- Stytch Test redirect URL allowlist updated to include `https://dev.macros.dalty.io/auth/callback`, `https://macros.dalty.io/auth/callback`, `https://*.vercel.app/auth/callback`.
+
+**Verified.**
+- `pnpm typecheck` clean across 4 packages.
+- `https://dev.macros.dalty.io/api/healthz` → DB-OK after dev rewire + redeploy.
+- `https://dev.macros.dalty.io` loads, fires `/me` `/meals` `/workouts` (401 as expected when logged out), redirects to `/login`. Magic-link round-trip confirmed end-to-end on dev.
+
+**Watch / outstanding for prod side:**
+- `macros.dalty.io` domain still needs to be **assigned to Production** in Vercel (Settings → Domains → Add). Once added, smoke-test `https://macros.dalty.io/api/healthz` and run [DEPLOY.md §6](DEPLOY.md#6-end-to-end-smoke-test-run-after-any-infra-change) on prod URL.
+- Railway env name is `prod` (not `production` as the original DEPLOY.md drafts referenced); service is named `macros` (not `api`). DEPLOY.md should be tightened to match — defer until prod is fully verified.
+- Stytch is still **Test for both envs**. Pre-launch: create Live project, set up Google OAuth client, verify sender domain, swap prod env vars. Until then prod can't deliver magic-link emails to anyone outside the Stytch dashboard owner's allowlist.
+- `nixpacks.toml` start command keeps the `db:migrate &&` prefix so dev auto-migrates. Prod's manual policy lives in Railway's Custom Start Command override — if someone clears that field, prod silently falls back to auto-migrate. Worth documenting alongside the Railway service settings.
+- `develop` branch hasn't been pushed yet. PR 13 work starts here; first push of `develop` will trigger the dev deploy.
+
 ### PR 1 — Wipe + scaffold (2026-05-01)
 
 **What landed.** Empty Python prototype deleted. Monorepo live with Turborepo + pnpm 9 workspaces, four packages: `apps/api` (Fastify + zod-validated env + `/health`), `apps/web` (Next.js 15 + Tailwind v4 placeholder page wired to `--color-accent`), `packages/shared` (zod schemas for profile/meals/workouts/recipes/chat + Mifflin-St Jeor + derived macro defaults), `packages/db` (Drizzle config, postgres-js client, `forUser` placeholder that throws until PR 2). Secrets moved to `apps/api/.env.local`; spec scrubbed. `docker-compose.yml` defines Postgres 16. Root `README.md` covers local dev steps.

@@ -38,6 +38,35 @@ _Updated as corrections are made during development._
 
 **How to apply**: any time the same scalar is used in both the projection and a GROUP BY / WINDOW / ORDER BY expression, validate + `sql.raw` rather than relying on Drizzle to dedupe parameters.
 
+## Railway: `DATABASE_URL` injected into services uses the private hostname
+
+**Symptom**: `railway run --service <api> pnpm db:migrate` from a local machine fails with `getaddrinfo ENOTFOUND postgres.railway.internal`.
+
+**Root cause**: Railway injects `DATABASE_URL` into application services pointing at the private network hostname `postgres.railway.internal`, which only resolves inside Railway's VPC. `railway run` forwards env vars to your local shell but NOT the private DNS, so any local process reading `DATABASE_URL` will fail to connect.
+
+**Rule**: when running DB-touching commands locally against a Railway Postgres (manual migrations against prod, ad-hoc psql, Drizzle Studio against an env), don't rely on the injected `DATABASE_URL`. Read `DATABASE_PUBLIC_URL` from the **Postgres service** (not the app service) — it's the `proxy.rlwy.net:<port>` form that's reachable from anywhere.
+
+**Reference fix**: in [DEPLOY.md §5](../DEPLOY.md#5-migration-policy) under "Manual prod migration":
+
+```sh
+DATABASE_URL=$(railway variables --service Postgres --kv | grep '^DATABASE_PUBLIC_URL=' | cut -d= -f2-) \
+  pnpm --filter @macros/db db:migrate
+```
+
+**How to apply**: anywhere that reads `process.env.DATABASE_URL` and runs outside Railway's network (local CLI, GitHub Actions, etc.) needs the public URL. Inside Railway containers, the injected internal URL is correct and faster. Don't try to make the code "smart" about which to pick — it's a deployment concern, not a code concern.
+
+## Vercel: Deployment Protection blocks aliased Preview domains too
+
+**Symptom**: `curl https://dev.macros.dalty.io/api/healthz` returns Vercel's HTML auth wall ("Authentication Required") instead of proxying to the API.
+
+**Root cause**: Vercel's **Deployment Protection** (Settings → Deployment Protection → Vercel Authentication) defaults to "Standard Protection" which gates every Preview deploy — including ones aliased to a custom domain via "Git Branch → ...". The custom hostname doesn't exempt the deploy.
+
+**Rule**: for any project that has its own application-level auth (Stytch, Auth0, Clerk, custom session cookies, etc.) and uses a long-running preview branch as a real dev environment, **disable Vercel Authentication** on that project. The app's own auth is the real gate; Vercel's wall just blocks external API checks (curl, monitoring, OAuth callbacks, magic-link redirects).
+
+**Reference fix**: Vercel project → Settings → Deployment Protection → Vercel Authentication → Disabled. (Or "Only Production Deployments" if you want the wall on PR previews but not on the aliased dev branch — but the project still has Stytch.)
+
+**How to apply**: the moment you alias a non-prod branch to a custom subdomain (`dev.example.com`, `staging.example.com`), check Deployment Protection. Same applies to any Vercel project where you intend to expose Preview deploys to real users or external services.
+
 ## Postgres custom GUCs — use `NULLIF(current_setting(name, true), '')`
 
 **Symptom**: RLS policy errors with `invalid input syntax for type uuid: ""` after the first request in a session.
