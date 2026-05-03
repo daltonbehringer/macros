@@ -31,3 +31,4 @@ coverage/
 *.pyc
 __pycache__/
 tasks/pr19-weekly-email-plan.md
+tasks/phase3-brainstorm.md
