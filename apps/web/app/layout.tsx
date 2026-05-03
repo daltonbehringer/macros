@@ -1,5 +1,5 @@
 import { Analytics } from "@vercel/analytics/next";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { cookies } from "next/headers";
 import { BottomNav } from "@/components/BottomNav";
@@ -21,6 +21,22 @@ export const metadata: Metadata = {
   title: "Macros — tracking, in plain language",
   description:
     "The food tracker that listens. Tell it what you ate; it does the math. No barcode scanner, no 800,000-item food database, no friend feed.",
+  appleWebApp: {
+    capable: true,
+    title: "Macros",
+    statusBarStyle: "black-translucent",
+  },
+};
+
+// Theme-color drives browser/OS chrome (the URL bar on Android Chrome, the
+// status bar in iOS standalone mode). Match the user's color scheme so the
+// chrome blends with the page rather than fighting it. Accent green stays a
+// brand pop, not chrome.
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a0b" },
+  ],
 };
 
 // Inline the theme decision before React hydrates so the page never flashes

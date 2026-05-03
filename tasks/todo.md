@@ -183,6 +183,39 @@ Sunday morning. Average daily kcal, total workouts, days on/off target, simplest
 
 ## Review section
 
+### PR 16 — PWA basics (2026-05-02)
+
+**What landed.** "Add to Home Screen" works on iOS + Android, opens in standalone mode (no browser chrome), branded with the app icon. No service worker, no offline mode, no push notifications.
+
+- [`apps/web/components/branding/Mark.tsx`](apps/web/components/branding/Mark.tsx) — single source of truth for the icon: bold lowercase "m" in accent green (`#00e08a`) on near-black (`#0a0a0b`), rendered via plain JSX with inline styles. Designed for `next/og`'s `ImageResponse` — uses `system-ui` to avoid font-fetching cost; takes a `size` prop and scales font size + optical-centering padding from it.
+- [`apps/web/app/icon.tsx`](apps/web/app/icon.tsx) — 32×32 favicon. Auto-conventions to `<link rel="icon">`.
+- [`apps/web/app/apple-icon.tsx`](apps/web/app/apple-icon.tsx) — 180×180 iOS apple-touch-icon. Auto-conventions to `<link rel="apple-touch-icon">`.
+- [`apps/web/app/icons/192/route.tsx`](apps/web/app/icons/192/route.tsx) + [`apps/web/app/icons/512/route.tsx`](apps/web/app/icons/512/route.tsx) — custom GET handlers returning 192×192 / 512×512 PNGs for the PWA manifest. Stable URLs (no Next.js asset hash) so the manifest can reference them statically.
+- [`apps/web/app/manifest.ts`](apps/web/app/manifest.ts) — Next.js manifest convention. `display: standalone`, `start_url: /`, theme + bg colors set to near-black, both icons declared with `purpose: any`. Auto-served at `/manifest.webmanifest`.
+- [`apps/web/app/layout.tsx`](apps/web/app/layout.tsx) — added `appleWebApp` metadata (`title: "Macros"`, `capable: true`, `statusBarStyle: black-translucent`) and a scheme-matched `viewport.themeColor` (white in light, near-black in dark) so the browser/OS chrome blends with the page rather than fighting it.
+
+No new deps. No PNG files in git. Single component drives every icon.
+
+**Verified.**
+- `pnpm typecheck` clean across 4 packages.
+- All five PWA endpoints return correctly:
+  - `GET /manifest.webmanifest` → 200, `application/manifest+json`, valid JSON
+  - `GET /icon` → 200, `image/png`, 391b
+  - `GET /apple-icon` → 200, `image/png`, 1.9 KB
+  - `GET /icons/192` → 200, `image/png`, 1.9 KB
+  - `GET /icons/512` → 200, `image/png`, 6.7 KB
+- Page head emits all expected tags: `<link rel="manifest">`, `<link rel="icon" sizes="32x32">`, `<link rel="apple-touch-icon" sizes="180x180">`, both scheme-scoped `<meta name="theme-color">`, `apple-mobile-web-app-title`, `apple-mobile-web-app-status-bar-style`.
+
+**Watch.**
+- Next.js 14+ emits `<meta name="mobile-web-app-capable">` (the modern unprefixed name) instead of the legacy `apple-mobile-web-app-capable`. Modern iOS (15+) honors the unprefixed form. iOS 14 and below might not enable standalone mode — fringe slice; not worth the bloat of a manual `<meta>` override.
+- The Mark component uses `system-ui` rather than Geist. `ImageResponse` from `next/og` requires fonts to be fetched via the `fonts: [...]` option — adds ~100 KB to the cold-start cost per icon route. System fonts render the lone "m" cleanly enough at every size we ship; if we ever want pixel-perfect Geist parity, swap to `fonts: [{ data: ..., name: 'Geist' }]`.
+- `/icons/192` and `/icons/512` are non-cached by default in the route handler. Vercel's edge will cache them (the response has no `Cache-Control` header, so it's the default), but if traffic ramps and these get hit hard, add `export const revalidate = 31536000` to make caching explicit.
+- The mark is square. iOS 14+ rounds corners automatically; Android handles its own shape per launcher. Not a maskable icon (no `purpose: maskable` slot in the manifest), so on Android launchers that crop aggressively, the "m" might get clipped on the edges. Defer adaptive/maskable until the design settles.
+- "Macros" is the home-screen label on iOS via `appleWebApp.title` and on Android via `manifest.short_name`. If we rebrand later, both update from the same two places.
+- `start_url: '/'` means installed-app launches go to the landing page (when logged out) or the dashboard (when logged in) — matches web behavior. If we ever want a different launch target for installed users (e.g. `/?source=pwa`), this is where to set it.
+- Splash screens not configured. iOS uses a default white/dark splash with the icon centered. If we want custom artwork, the iOS API needs a long list of `apple-touch-startup-image` link tags per device size — tedious; defer.
+- Real-device install + launch flow is **not yet verified** — needs a phone test on `dev.macros.dalty.io` after deploy. Open the URL in mobile Safari/Chrome → Share → Add to Home Screen → tap the icon → confirm it launches in standalone (no browser chrome) with the correct icon.
+
 ### PR 15 — Vercel Analytics (2026-05-02)
 
 **What landed.** Privacy-friendly, cookie-free web analytics via Vercel. Page views automatic; six custom events fire at key activation moments. No PII (no user IDs, emails, or message content). Per the "save events, log essentials" guidance: each chat-tool firing emits at most one event per kind per turn (logging three meals in one chat message counts as one), no per-event properties anywhere.
