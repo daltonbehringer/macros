@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireAuth } from "../auth/middleware";
 import { getDb } from "../db";
 import { runChatTurn } from "./loop";
+import { getQuotaForUser } from "./quota";
 import { buildSystemPrompt } from "./systemPrompt";
 import type { ToolContext } from "./tools";
 
@@ -31,6 +32,27 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
     }
     const user = req.user!;
     const { db } = getDb();
+
+    // Pre-flight: enforce the daily chat quota *before* calling Anthropic.
+    // We pull just the timezone here (full profile load happens later inside
+    // the main data-fetch block); quota math respects the user's local day.
+    const preflight = await forUser(db, user.id, async (tx) => {
+      const rows = await tx
+        .select({ timezone: schema.userProfiles.timezone })
+        .from(schema.userProfiles)
+        .where(eq(schema.userProfiles.userId, user.id))
+        .limit(1);
+      const tz = rows[0]?.timezone ?? "UTC";
+      const quota = await getQuotaForUser(tx, user.id, tz);
+      return { tz, quota };
+    });
+    if (preflight.quota.remaining <= 0) {
+      reply.code(429).send({
+        error: "rate_limited",
+        quota: preflight.quota,
+      });
+      return;
+    }
 
     // Sweep messages older than 30 days (rolling retention, per spec).
     await db
@@ -198,6 +220,12 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
       ]);
     });
 
+    // Re-fetch quota now that the user's message has been persisted, so the
+    // client's counter is fresh without a separate roundtrip.
+    const updatedQuota = await forUser(db, user.id, (tx) =>
+      getQuotaForUser(tx, user.id, preflight.tz),
+    );
+
     return {
       reply: result.text,
       toolCalls: result.toolCalls,
@@ -207,7 +235,22 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
         cacheRead: result.usage.cache_read_input_tokens ?? 0,
         cacheWrite: result.usage.cache_creation_input_tokens ?? 0,
       },
+      quota: updatedQuota,
     };
+  });
+
+  app.get("/chat/quota", { preHandler: requireAuth }, async (req) => {
+    const user = req.user!;
+    const { db } = getDb();
+    return forUser(db, user.id, async (tx) => {
+      const rows = await tx
+        .select({ timezone: schema.userProfiles.timezone })
+        .from(schema.userProfiles)
+        .where(eq(schema.userProfiles.userId, user.id))
+        .limit(1);
+      const tz = rows[0]?.timezone ?? "UTC";
+      return getQuotaForUser(tx, user.id, tz);
+    });
   });
 
   app.get("/chat/messages", { preHandler: requireAuth }, async (req) => {

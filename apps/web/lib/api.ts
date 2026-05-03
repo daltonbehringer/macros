@@ -1,4 +1,5 @@
 import type {
+  ChatQuota,
   CreateMealInput,
   CreateRecipeInput,
   CreateWorkoutInput,
@@ -17,7 +18,14 @@ export const STYTCH_PUBLIC_TOKEN =
   process.env.NEXT_PUBLIC_STYTCH_PUBLIC_TOKEN ?? "";
 
 export class ApiError extends Error {
-  constructor(public status: number, public code: string) {
+  constructor(
+    public status: number,
+    public code: string,
+    /** Full parsed JSON response body, when present. Lets specific handlers
+     * read structured payloads like the `quota` field on a 429 without a
+     * second fetch. */
+    public data?: unknown,
+  ) {
     super(`api ${status}: ${code}`);
   }
 }
@@ -34,11 +42,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   });
   if (!res.ok) {
     let code = "unknown_error";
+    let body: unknown = null;
     try {
-      const body = (await res.json()) as { error?: string };
-      if (body.error) code = body.error;
+      body = await res.json();
+      const e = (body as { error?: string }).error;
+      if (e) code = e;
     } catch {}
-    throw new ApiError(res.status, code);
+    throw new ApiError(res.status, code, body);
   }
   return res.json() as Promise<T>;
 }
@@ -98,7 +108,9 @@ export const api = {
       reply: string;
       toolCalls: Array<{ name: string; input: unknown; result: unknown }>;
       usage: { input: number; output: number; cacheRead: number; cacheWrite: number };
+      quota: ChatQuota;
     }>("/chat", { method: "POST", body: JSON.stringify(body) }),
+  getChatQuota: () => request<ChatQuota>("/chat/quota"),
   listChatMessages: () =>
     request<
       Array<{

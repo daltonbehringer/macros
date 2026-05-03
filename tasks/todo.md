@@ -183,6 +183,34 @@ Sunday morning. Average daily kcal, total workouts, days on/off target, simplest
 
 ## Review section
 
+### PR 17 — Per-user daily chat quota (2026-05-02)
+
+**What landed.** Server-enforced cap of 30 user-role chat messages per local day per user, surfaced subtly in both chat UIs. Protects against runaway Anthropic spend before pricing exists.
+
+- [`packages/shared/src/schemas/chat.ts`](packages/shared/src/schemas/chat.ts) — new `ChatQuota` type (`remaining`, `limit`, `resetsAt` ISO). Server is sole source of truth for `limit` so changing the cap is a server-only deploy.
+- [`apps/api/src/chat/quota.ts`](apps/api/src/chat/quota.ts) — `DAILY_LIMIT = 30`, `getQuotaForUser(tx, userId, timezone)`. Computes "today 00:00 in tz" as a UTC moment via Postgres tz arithmetic, counts user-role `chat_messages` since that boundary, returns `{ remaining, limit, resetsAt }`. Timezone validated against `Intl.supportedValuesOf("timeZone")` before being inlined via `sql.raw` (avoids the Drizzle param-dedup gotcha documented in lessons.md).
+- [`apps/api/src/chat/routes.ts`](apps/api/src/chat/routes.ts):
+  - **Pre-flight in `POST /chat`**: a small `forUser` block reads timezone + computes quota *before* calling Anthropic. If `remaining <= 0`, returns 429 `{ error: "rate_limited", quota }`. No Anthropic call, no token spend.
+  - **Post-process**: re-fetches quota after the user message persists so the response carries a fresh counter (saves the client a roundtrip).
+  - **New `GET /chat/quota`** endpoint so the UI can show the counter on mount, before the user's first send of the day.
+- [`apps/web/lib/api.ts`](apps/web/lib/api.ts) — `ApiError` gained an optional `data` field that carries the parsed JSON response body. Lets specific handlers (like the 429 path) read structured payloads without a second fetch. `sendChat` return type now includes `quota`; `getChatQuota()` added.
+- [`apps/web/components/QuickChatInput.tsx`](apps/web/components/QuickChatInput.tsx) — fetches quota on mount, displays inline in the footer hint (`Enter to send · ... · 27/30 today`). Below `WARN_THRESHOLD = 5` the counter goes amber. At 0: textarea + Send disabled, placeholder/error explains the reset and points users at the manual-log escape hatch ("You can still log meals and workouts manually").
+- [`apps/web/app/chat/page.tsx`](apps/web/app/chat/page.tsx) — same quota fetch + 429 handling. Counter rendered as a small mono right-aligned strip below the input. Same disabled-state behavior. (User refined the 429 copy mid-session to add the manual-log escape hatch line; QuickChatInput's copy was updated to match.)
+
+**Verified.**
+- `pnpm typecheck` clean across 4 packages.
+- `GET /chat/quota` returns 401 without a session cookie (auth guard intact).
+- Browser smoke: counter renders on mount, decrements after each send, color shifts amber within 5 of the cap.
+
+**Watch.**
+- **Race**: two concurrent `POST /chat` calls can both pass pre-flight (count reads before either persists). Worst case: the 31st message slips through. Cost = one extra Anthropic call. Not worth a `SELECT FOR UPDATE` for MVP. If it ever matters, the fix is wrapping pre-flight + insert in a single transaction with row-level locking on `chat_messages` for that user.
+- **Tool iterations don't bill against quota**: a single chat turn that fires 5 tool calls still counts as 1 user message. Correct for "user sent a message" semantics but means a tool-heavy day is *cheaper* on quota than a chatty day. If we ever want token-cost-based limits, that needs a separate accounting path.
+- **Timezone changes mid-day**: a user moving from PST → EST (or just changing the field in Settings) shifts the quota window. They could theoretically reset their day by jumping forward 24h. Acceptable edge — not a real abuse vector in normal use.
+- **DST boundary days** are handled by Postgres tz math correctly. Spring-forward day = 23-hour window; fall-back = 25-hour. No code awareness needed.
+- **Server is the only place `DAILY_LIMIT` is defined** — clients receive `limit` from API responses and never assume. Changing the cap is one constant in `chat/quota.ts` + restart, no client deploy. If we add a paid tier later, the field becomes per-user and reads from the user record instead of a constant.
+- The `ApiError.data` field is now generically available to all callers. Most callers can ignore it (the existing `instanceof ApiError && status === 401` pattern still works untouched). Use it sparingly — it's there for cases where the server sends a structured payload alongside the error code.
+- `WARN_THRESHOLD = 5` is duplicated in both QuickChatInput and the chat page. If we ever want to tune it, both need updating. Could hoist to shared but it's purely client-side cosmetic — not worth the import path until there's a third caller.
+
 ### PR 16 — PWA basics (2026-05-02)
 
 **What landed.** "Add to Home Screen" works on iOS + Android, opens in standalone mode (no browser chrome), branded with the app icon. No service worker, no offline mode, no push notifications.

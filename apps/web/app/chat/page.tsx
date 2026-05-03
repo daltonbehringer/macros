@@ -1,10 +1,13 @@
 "use client";
 
+import type { ChatQuota } from "@macros/shared";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { trackChatToolCalls } from "@/lib/analytics";
 import { api, ApiError } from "@/lib/api";
 import { todayLabel, todayLocal, todayRange } from "@/lib/dates";
+
+const WARN_THRESHOLD = 5;
 
 type Message = {
   id: string;
@@ -20,6 +23,7 @@ export default function ChatPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [quota, setQuota] = useState<ChatQuota | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -36,7 +40,13 @@ export default function ChatPage() {
         }
         setError(err instanceof Error ? err.message : "load failed");
       });
+    api
+      .getChatQuota()
+      .then(setQuota)
+      .catch(() => {});
   }, [router]);
+
+  const exhausted = quota !== null && quota.remaining <= 0;
 
   useEffect(() => {
     if (scrollerRef.current) {
@@ -47,7 +57,7 @@ export default function ChatPage() {
   const onSend = async (e: React.FormEvent) => {
     e.preventDefault();
     const text = value.trim();
-    if (!text || busy) return;
+    if (!text || busy || exhausted) return;
     setBusy(true);
     setError(null);
     setValue("");
@@ -79,15 +89,22 @@ export default function ChatPage() {
           createdAt: new Date().toISOString(),
         },
       ]);
+      setQuota(result.quota);
       if (result.toolCalls.length > 0) trackChatToolCalls(result.toolCalls);
     } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? `chat: ${err.status} ${err.code}`
-          : err instanceof Error
-            ? err.message
-            : "chat failed",
-      );
+      if (err instanceof ApiError && err.status === 429) {
+        const data = err.data as { quota?: ChatQuota } | null;
+        if (data?.quota) setQuota(data.quota);
+        setError("Daily limit reached - resets at midnight local. You can still log meals and workouts manually.");
+      } else {
+        setError(
+          err instanceof ApiError
+            ? `chat: ${err.status} ${err.code}`
+            : err instanceof Error
+              ? err.message
+              : "chat failed",
+        );
+      }
       // Roll back the optimistic bubble on error
       setMessages((xs) => xs.filter((m) => m.id !== tempUser.id));
     } finally {
@@ -146,18 +163,37 @@ export default function ChatPage() {
               }
             }}
             rows={2}
-            disabled={busy}
-            placeholder="Message macros…"
+            disabled={busy || exhausted}
+            placeholder={
+              exhausted
+                ? "Daily limit reached — resets at midnight local."
+                : "Message macros…"
+            }
             className="block w-full resize-none rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm placeholder:text-zinc-400 focus:border-[color:var(--color-accent)] focus:outline-none disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900"
           />
           <button
             type="submit"
-            disabled={!value.trim() || busy}
+            disabled={!value.trim() || busy || exhausted}
             className="self-stretch rounded-lg bg-[color:var(--color-accent)] px-4 text-sm font-medium text-zinc-900 hover:bg-[color:var(--color-accent-hover)] disabled:cursor-not-allowed disabled:opacity-40"
           >
             Send
           </button>
         </div>
+        {quota && (
+          <div
+            className={`mx-auto mt-2 max-w-2xl text-right font-mono text-[10px] uppercase tracking-widest tabular-nums ${
+              quota.remaining <= 0
+                ? "text-amber-600 dark:text-amber-400"
+                : quota.remaining <= WARN_THRESHOLD
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-zinc-400"
+            }`}
+          >
+            {quota.remaining <= 0
+              ? "Daily limit reached"
+              : `${quota.remaining}/${quota.limit} today`}
+          </div>
+        )}
       </form>
     </main>
   );
