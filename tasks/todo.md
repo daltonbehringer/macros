@@ -48,9 +48,9 @@ Track: page views, `signup_completed`, `onboarding_completed`, `meal_logged_via_
 
 Free tier. Wire web + api. No PII (no message content, no emails — user IDs OK).
 
-### PR 19 — Weekly summary email
+### PR 19 — Weekly summary email — **DEFERRED (2026-05-02)**
 
-Sunday morning. Average daily kcal, total workouts, days on/off target, simplest macro breakdown. Reuse `/history` aggregation. Resend or similar (NOT Stytch). One-click unsubscribe.
+Plan captured in [`tasks/pr19-weekly-email-plan.md`](pr19-weekly-email-plan.md). Re-engagement nice-to-have; deprioritized in favor of getting first users on Phase 2 surfaces. Schema migration is a clean additive change when picked back up — no rework needed.
 
 ---
 
