@@ -17,6 +17,7 @@ import {
   ToggleGroup,
   WeightInput,
 } from "@/components/profile/inputs";
+import { track } from "@/lib/analytics";
 import { api, ApiError } from "@/lib/api";
 
 type Step = 1 | 2 | 3;
@@ -100,6 +101,7 @@ export function OnboardingFlow() {
         heightCm: draft.heightCm,
         weightKg: draft.weightKg,
       });
+      track("onboarding_completed");
       router.replace("/?focus=chat");
     } catch (err) {
       setError(err instanceof Error ? err.message : "save failed");

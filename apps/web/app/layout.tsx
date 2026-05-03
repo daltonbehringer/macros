@@ -1,3 +1,4 @@
+import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { cookies } from "next/headers";
@@ -53,6 +54,7 @@ export default async function RootLayout({
       <body className="bg-white font-sans text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100">
         {children}
         <BottomNav authenticated={authenticated} />
+        <Analytics />
       </body>
     </html>
   );

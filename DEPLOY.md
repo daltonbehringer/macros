@@ -257,6 +257,40 @@ Once you create it:
 
 ---
 
+## 4c. Vercel Web Analytics
+
+Web Analytics is wired in code (`<Analytics />` mounted in the root layout, custom events fired via `apps/web/lib/analytics.ts`). It needs one dashboard click to start collecting:
+
+1. Vercel project → **Analytics** tab → **Enable Web Analytics**
+2. (Optional) Same panel → **Custom Events** to view per-event counts after they start arriving
+
+Local dev is auto-disabled by the SDK (`mode="auto"` no-ops on `localhost`) — no events fire from `pnpm dev`.
+
+### Custom event vocabulary
+
+The full list lives in `apps/web/lib/analytics.ts` as the `EventName` union — adding a new event anywhere else is a typecheck error. Current events:
+
+| Event | Where | Notes |
+|---|---|---|
+| `signup_completed` | `/auth/callback` after a successful auth round-trip, only when the resulting profile has no identity fields filled in | Heuristic: a fresh user has empty profile fields. Users who delete their account and re-sign-in will also fire this — accepted conflation rather than a server-side flag |
+| `onboarding_completed` | `OnboardingFlow.tsx` after the PUT succeeds | Fires before the redirect to `/?focus=chat` |
+| `meal_logged_via_chat` | Chat path (both `QuickChatInput` and `/chat`) when the chat turn's `toolCalls` includes `log_meal` or `log_meal_from_recipe` | Fires at most once per chat turn even if multiple meals were logged — saves quota |
+| `meal_logged_manual` | `Dashboard.tsx` `MealForm` after `createMeal` succeeds | Manual entry via the dashboard's "+ Log manually" panel |
+| `workout_logged` | Chat path (when `toolCalls` includes `log_workout`) and `Dashboard.tsx` `WorkoutForm` | Single event for both sources — if the chat-vs-manual split matters later, add a `source` prop |
+| `delete_account` | `Settings.tsx` after `deleteAllData` succeeds, before the redirect to `/login` | |
+
+Page views are recorded automatically — no per-route instrumentation.
+
+### Quota
+
+Hobby tier: 2,500 events/month. Pro: 25k. Each event above + every page view counts as one event. For an MVP this is generous; once traffic ramps, the page-view firehose is the most likely thing to overshoot — keep an eye on the Analytics tab.
+
+### Privacy
+
+Vercel Web Analytics is cookie-free. No PII is sent: events carry only their name (no user IDs, emails, or message content). Page views carry URL + referrer + device class. Nothing else.
+
+---
+
 ## 5. Migration policy
 
 | | Trigger | Mechanism |

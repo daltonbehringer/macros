@@ -1,7 +1,9 @@
 "use client";
 
+import { needsOnboarding } from "@macros/shared";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
+import { track } from "@/lib/analytics";
 import { api, ApiError } from "@/lib/api";
 
 type Status = "exchanging" | "error";
@@ -27,7 +29,19 @@ function CallbackInner() {
     }
     api
       .authenticate(token, type)
-      .then(() => router.replace("/"))
+      .then(async () => {
+        // Heuristic for "this is a new user": their profile has no identity
+        // fields filled in, which is exactly the onboarding trigger. A user
+        // who deletes their account and re-signs-in will also fire this; we
+        // accept that conflation rather than adding a server-side flag.
+        try {
+          const me = await api.me();
+          if (needsOnboarding(me.profile)) track("signup_completed");
+        } catch {
+          /* don't block sign-in on a /me hiccup */
+        }
+        router.replace("/");
+      })
       .catch((err) => {
         setStatus("error");
         setErrorCode(err instanceof ApiError ? err.code : "unknown_error");

@@ -18,6 +18,7 @@ import {
   WeightInput,
 } from "@/components/profile/inputs";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { track } from "@/lib/analytics";
 import { api, ApiError, type Me } from "@/lib/api";
 
 export default function SettingsPage() {
@@ -73,6 +74,8 @@ export default function SettingsPage() {
   const onDelete = async () => {
     try {
       await api.deleteAllData();
+      // Fire before navigation so the SDK has a chance to send the beacon.
+      track("delete_account");
       router.replace("/login");
     } catch (err) {
       setError(err instanceof Error ? err.message : "delete failed");

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { trackChatToolCalls } from "@/lib/analytics";
 import { api, ApiError } from "@/lib/api";
 import { todayLabel, todayLocal, todayRange } from "@/lib/dates";
 
@@ -44,7 +45,10 @@ export function QuickChatInput({
       });
       setReply(result.reply);
       setValue("");
-      if (result.toolCalls.length > 0) await onAfterReply?.();
+      if (result.toolCalls.length > 0) {
+        trackChatToolCalls(result.toolCalls);
+        await onAfterReply?.();
+      }
     } catch (err) {
       setError(
         err instanceof ApiError

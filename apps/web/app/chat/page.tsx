@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { trackChatToolCalls } from "@/lib/analytics";
 import { api, ApiError } from "@/lib/api";
 import { todayLabel, todayLocal, todayRange } from "@/lib/dates";
 
@@ -78,6 +79,7 @@ export default function ChatPage() {
           createdAt: new Date().toISOString(),
         },
       ]);
+      if (result.toolCalls.length > 0) trackChatToolCalls(result.toolCalls);
     } catch (err) {
       setError(
         err instanceof ApiError

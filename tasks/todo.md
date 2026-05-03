@@ -183,6 +183,34 @@ Sunday morning. Average daily kcal, total workouts, days on/off target, simplest
 
 ## Review section
 
+### PR 15 — Vercel Analytics (2026-05-02)
+
+**What landed.** Privacy-friendly, cookie-free web analytics via Vercel. Page views automatic; six custom events fire at key activation moments. No PII (no user IDs, emails, or message content). Per the "save events, log essentials" guidance: each chat-tool firing emits at most one event per kind per turn (logging three meals in one chat message counts as one), no per-event properties anywhere.
+
+- [`apps/web/lib/analytics.ts`](apps/web/lib/analytics.ts) — typed wrapper. The `EventName` union is the single source of truth — using an unlisted name anywhere is a typecheck error. `track()` swallows network/ad-blocker failures so analytics issues never reach the UI. `trackChatToolCalls(calls)` inspects the chat result and fires `meal_logged_via_chat` and/or `workout_logged` once per kind per turn.
+- [`apps/web/app/layout.tsx`](apps/web/app/layout.tsx) — `<Analytics />` from `@vercel/analytics/next` mounted at the body. Records page views automatically. Local dev is auto-disabled by the SDK (`mode="auto"` no-ops on `localhost`).
+- [`apps/web/app/auth/callback/page.tsx`](apps/web/app/auth/callback/page.tsx) — fires `signup_completed` heuristically: after a successful auth round-trip, calls `/me` and fires the event only if `needsOnboarding(profile) === true`. Returning users with a fresh-deleted account will also fire — accepted conflation rather than a server-side `created: true` flag.
+- [`apps/web/components/onboarding/OnboardingFlow.tsx`](apps/web/components/onboarding/OnboardingFlow.tsx) — fires `onboarding_completed` after the PUT, before the `/?focus=chat` redirect.
+- [`apps/web/components/QuickChatInput.tsx`](apps/web/components/QuickChatInput.tsx) + [`apps/web/app/chat/page.tsx`](apps/web/app/chat/page.tsx) — both call `trackChatToolCalls(result.toolCalls)` after a successful chat reply.
+- [`apps/web/components/Dashboard.tsx`](apps/web/components/Dashboard.tsx) — `MealForm` fires `meal_logged_manual`; `WorkoutForm` fires `workout_logged`.
+- [`apps/web/app/settings/page.tsx`](apps/web/app/settings/page.tsx) — fires `delete_account` after the API call succeeds, before the navigation away.
+- [`DEPLOY.md`](DEPLOY.md) — new §4c documenting the event vocabulary, the dashboard enable step (Vercel project → Analytics tab → Enable Web Analytics), Hobby tier 2,500 events/month quota, and the cookie-free / no-PII privacy stance.
+- `apps/web/package.json` — `@vercel/analytics` added.
+
+**Verified.**
+- `pnpm typecheck` clean across 4 packages.
+- All routes (`/`, `/onboarding`, `/settings`, `/chat`) still 200 in local dev.
+- SDK confirmed dev-aware: no `va.vercel-scripts.com` script tags appear in SSR HTML on localhost. Real beacons will only start firing post-deploy on `dev.macros.dalty.io` once Web Analytics is enabled in the dashboard.
+
+**Watch.**
+- The single typed wrapper in [`apps/web/lib/analytics.ts`](apps/web/lib/analytics.ts) is the **only** sanctioned way to send events. Adding a new event = add a name to the `EventName` union, then call `track('your_name')`. Don't import from `@vercel/analytics` directly elsewhere — the wrapper's try/catch is what makes analytics non-blocking.
+- Hobby tier quota is 2,500 events/month. For an MVP that's plenty, but the **page-view firehose** is the most likely thing to overshoot first since every navigation counts. If traffic ramps and you're approaching the cap, the Custom Events panel in the Vercel dashboard will tell you which slice to trim (e.g., sample non-essential pages via `<Analytics beforeSend={...} />`).
+- `signup_completed` heuristic vs reality: it fires whenever `needsOnboarding === true` after auth. Edge case: a user who deletes their account and re-signs-in will fire it twice in their lifetime. If that distinction matters for funnel math, swap to a server-side flag returned from `/auth/authenticate`. Not worth doing now.
+- `delete_account` fires before the `/login` redirect specifically so the SDK's beacon has a chance to send before navigation. If we ever switch to `router.push` (no full nav) the explicit ordering becomes irrelevant; if we add other "fire then navigate" patterns, follow this same shape.
+- Chat-vs-manual workout split is **not** in the events. Adding `{ source: 'chat' | 'manual' }` later is a 2-line change at the two call sites — defer until you actually want to chart it.
+- `<Analytics />` is mounted in the root layout, which means it's loaded on the **landing page** too — a logged-out visitor's page view counts toward your quota. That's intentional (you want to know how the landing performs), but worth noting if you're surprised by event volume.
+- Vercel Speed Insights (Core Web Vitals) is a separate package and quota — not included. Add `@vercel/speed-insights` only if performance becomes a concern.
+
 ### PR 14 — First-run onboarding (2026-05-02)
 
 **What landed.** A 3-step inline onboarding flow that fresh users hit after signing up, before they see the dashboard. Designed to feel like 30 seconds of work, not a settings page.

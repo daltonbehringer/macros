@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { MacroRing } from "@/components/MacroRing";
 import { QuickChatInput } from "@/components/QuickChatInput";
+import { track } from "@/lib/analytics";
 import { api, ApiError, type Me } from "@/lib/api";
 import { todayRange } from "@/lib/dates";
 
@@ -313,6 +314,7 @@ function MealForm({ onCreated }: { onCreated: () => Promise<void> }) {
         carbsG: Number(carbsG) || 0,
         fatG: Number(fatG) || 0,
       });
+      track("meal_logged_manual");
       setDescription("");
       setCalories("");
       setProteinG("");
@@ -380,6 +382,7 @@ function WorkoutForm({ onCreated }: { onCreated: () => Promise<void> }) {
         caloriesBurned: Number(caloriesBurned) || 0,
         durationMinutes: durationMinutes ? Number(durationMinutes) : null,
       });
+      track("workout_logged");
       setDescription("");
       setCaloriesBurned("");
       setDurationMinutes("");
