@@ -183,6 +183,38 @@ Sunday morning. Average daily kcal, total workouts, days on/off target, simplest
 
 ## Review section
 
+### PR 14 — First-run onboarding (2026-05-02)
+
+**What landed.** A 3-step inline onboarding flow that fresh users hit after signing up, before they see the dashboard. Designed to feel like 30 seconds of work, not a settings page.
+
+- [`packages/shared/src/macros.ts`](packages/shared/src/macros.ts) — new `needsOnboarding(profile)` helper. Returns true iff all five identity fields (`weightKg`, `heightCm`, `age`, `sex`, `activityLevel`) are null. `unitSystem` and `timezone` intentionally excluded — both have defaults set on row creation, so checking them would always return false.
+- [`apps/web/components/profile/inputs.tsx`](apps/web/components/profile/inputs.tsx) — new shared module. Extracted `ToggleGroup`, `NumberInput`, `WeightInput`, `HeightInput`, and the `ACTIVITY_OPTIONS` constant from Settings so both Settings and Onboarding share the same input components. No behavior change for Settings.
+- [`apps/web/app/onboarding/page.tsx`](apps/web/app/onboarding/page.tsx) — new route. Thin wrapper around `OnboardingFlow`.
+- [`apps/web/components/onboarding/OnboardingFlow.tsx`](apps/web/components/onboarding/OnboardingFlow.tsx) — the 3-step state machine. Editorial layout: progress bar (3 dashes that fill accent green as you advance), mono eyebrow `01 / 03 · About you`, big editorial question, focused input cluster, "Next →" / "← Back" CTAs.
+  - **Step 1 — About you**: sex toggle, age number input, activity level as a vertical stack of radio cards (label + one-line hint). Next disabled until all three set.
+  - **Step 2 — Your body**: units toggle, height (respects units), weight (respects units). Next disabled until height + weight set.
+  - **Step 3 — Your targets**: 4 stat tiles showing computed calories / P / C / F, with the mono `TDEE 2200 kcal · 165P · 220C · 70F` summary below. "Let's go" → single PUT to `/profile` with all 6 fields → `router.replace('/?focus=chat')`.
+  - Bootstraps via a `/me` call: bounces to `/login` on 401, bounces to `/` if already onboarded (so users who land here directly post-onboarding don't restart). Picks up the existing `unitSystem` from the profile so step 2 starts on the right unit.
+- [`apps/web/components/Dashboard.tsx`](apps/web/components/Dashboard.tsx) — when `/me` resolves and `needsOnboarding(profile) === true`, redirects to `/onboarding` instead of rendering the dashboard. Also reads `?focus=chat` from search params and (on desktop only — `window.innerWidth >= 768`) sets `autoFocus={true}` on `<QuickChatInput>` so post-onboarding users land with the cursor in the chat box.
+- [`apps/web/components/QuickChatInput.tsx`](apps/web/components/QuickChatInput.tsx) — accepts an `autoFocus` prop. Holds a ref to the textarea; on mount, if `autoFocus` is true, focuses it.
+- [`apps/web/app/settings/page.tsx`](apps/web/app/settings/page.tsx) — simplified imports (now pulls inputs from `components/profile/inputs.tsx`). Lost ~120 lines of duplicate component definitions. No behavioral change.
+
+**Verified.**
+- `pnpm typecheck` clean across 4 packages.
+- `curl /onboarding` → 200; `curl /settings` → 200 (post-extraction Settings still SSRs).
+- Local browser: full fresh-user round-trip — Settings danger-zone delete → re-sign-in → land on `/` → redirected to `/onboarding` → walk all 3 steps → land on `/?focus=chat` → dashboard renders with chat input focused.
+- Already-onboarded users visiting `/onboarding` directly bounce to `/`.
+- 375px mobile reflow: each step is one-thumb usable, activity radio cards stack cleanly.
+
+**Watch.**
+- The `needsOnboarding` helper checks 5 fields and returns false as soon as **any** is filled. If a user partially fills the flow and bails (closes browser between steps), no fields have hit the server yet — they'll re-enter onboarding from step 1 next visit. Acceptable for a 30-second flow; would matter if we ever moved to incremental persistence.
+- `autoFocus` on the chat input only fires on the first render after `?focus=chat` arrives. If a user navigates away and back to `/?focus=chat`, the URL persists but the auto-focus only re-fires if `searchParams` changes (it does, since the param is still there). Slight quirk: if you reload the dashboard with `?focus=chat` still in the URL, focus pops again. Probably fine — feels deliberate, not buggy. Could clear the query param after focusing if it gets annoying.
+- Onboarding writes `unitSystem` even though the user might not have changed it from the existing default. PUT semantics are PATCH (only sent keys are written), so this is intentional — picks up whichever unit they confirmed in step 2.
+- Settings page lost 120 lines but its structure is unchanged. Any new input component added to Settings should land in `components/profile/inputs.tsx` so both flows pick it up.
+- The onboarding flow has no `unitSystem`-specific copy ("we'll do the math in pounds" etc.). On step 3, computed values are shown in the canonical units (kcal, g) regardless of the user's display preference. Matches Settings behavior.
+- No analytics yet — `signup_completed` and `onboarding_completed` events land in PR 15.
+- Step 1 + step 2 keep state in component memory only. There's no Zod validation on the boundary between client steps — the inputs already enforce min/max, and the server's PUT validates everything. No double-validation needed.
+
 ### PR 13 — Public landing page at `/` (2026-05-02)
 
 **What landed.** Logged-out visitors at `/` now see a real public landing page instead of being force-redirected to `/login`. Authenticated users still land on the dashboard at the same URL with no extra clicks.

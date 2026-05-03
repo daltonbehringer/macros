@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { todayLabel, todayLocal, todayRange } from "@/lib/dates";
 
@@ -11,13 +11,20 @@ import { todayLabel, todayLocal, todayRange } from "@/lib/dates";
  */
 export function QuickChatInput({
   onAfterReply,
+  autoFocus,
 }: {
   onAfterReply?: () => void | Promise<void>;
+  autoFocus?: boolean;
 }) {
   const [value, setValue] = useState("");
   const [reply, setReply] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    if (autoFocus) textareaRef.current?.focus();
+  }, [autoFocus]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,6 +65,7 @@ export function QuickChatInput({
         className="rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
       >
         <textarea
+          ref={textareaRef}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {

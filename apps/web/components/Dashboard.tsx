@@ -1,7 +1,12 @@
 "use client";
 
-import { effectiveTargets, type Meal, type Workout } from "@macros/shared";
-import { useRouter } from "next/navigation";
+import {
+  effectiveTargets,
+  needsOnboarding,
+  type Meal,
+  type Workout,
+} from "@macros/shared";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { MacroRing } from "@/components/MacroRing";
@@ -11,16 +16,34 @@ import { todayRange } from "@/lib/dates";
 
 export function Dashboard() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [me, setMe] = useState<Me | null>(null);
   const [meals, setMeals] = useState<Meal[]>([]);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showLogForms, setShowLogForms] = useState(false);
+  const [autoFocusChat, setAutoFocusChat] = useState(false);
   const range = useMemo(() => todayRange(), []);
+
+  // Onboarding hand-off: only auto-focus the chat input on desktop. Pulling
+  // up the soft keyboard immediately on load is jarring on mobile.
+  useEffect(() => {
+    if (
+      searchParams?.get("focus") === "chat" &&
+      typeof window !== "undefined" &&
+      window.innerWidth >= 768
+    ) {
+      setAutoFocusChat(true);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     Promise.all([api.me(), api.listMeals(range), api.listWorkouts(range)])
       .then(([m, ml, w]) => {
+        if (needsOnboarding(m.profile)) {
+          router.replace("/onboarding");
+          return;
+        }
         setMe(m);
         setMeals(ml);
         setWorkouts(w);
@@ -208,7 +231,7 @@ export function Dashboard() {
       </section>
 
       <section className="mb-10">
-        <QuickChatInput onAfterReply={refresh} />
+        <QuickChatInput onAfterReply={refresh} autoFocus={autoFocusChat} />
       </section>
 
       <section className="mb-10">

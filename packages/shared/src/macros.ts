@@ -74,6 +74,25 @@ export function defaultMacroTargets(args: {
 }
 
 /**
+ * True iff a profile has none of the five identity fields set. Used to gate
+ * first-run onboarding — once a user touches any of these in Settings or via
+ * the onboarding flow, we never force them through onboarding again.
+ *
+ * `unitSystem` and `timezone` are intentionally excluded; both have defaults
+ * set on row creation, so checking them would always return false.
+ */
+export function needsOnboarding(profile: UserProfile | null): boolean {
+  if (!profile) return false;
+  return (
+    profile.weightKg === null &&
+    profile.heightCm === null &&
+    profile.age === null &&
+    profile.sex === null &&
+    profile.activityLevel === null
+  );
+}
+
+/**
  * Effective targets for a user. Returns null for any value that can't be
  * computed yet (profile incomplete) and isn't overridden.
  *
