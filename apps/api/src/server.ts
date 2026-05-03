@@ -9,6 +9,7 @@ import { historyRoutes } from "./history/routes";
 import { mealRoutes } from "./meals/routes";
 import { profileRoutes } from "./profile/routes";
 import { recipeRoutes } from "./recipes/routes";
+import { Sentry } from "./sentry";
 import { workoutRoutes } from "./workouts/routes";
 import { env } from "./env";
 
@@ -59,6 +60,26 @@ export function buildServer() {
   app.register(recipeRoutes);
   app.register(historyRoutes);
   app.register(chatRoutes);
+
+  // Forward unhandled exceptions to Sentry. Sentry's beforeSend handler
+  // strips request bodies/cookies/auth headers so chat content doesn't leak
+  // — we just need to capture before Fastify replies. Skip 4xx (those are
+  // expected user errors, not bugs); only capture 5xx and unclassified.
+  app.setErrorHandler(async (err, req, reply) => {
+    const status = (err as { statusCode?: number }).statusCode ?? 500;
+    if (status >= 500) {
+      // Attach the (anonymous) user id for correlation if the request was
+      // authenticated. No email, no profile data.
+      Sentry.withScope((scope) => {
+        if (req.user?.id) scope.setUser({ id: req.user.id });
+        Sentry.captureException(err);
+      });
+    }
+    req.log.error({ err }, "request errored");
+    reply.code(status).send({
+      error: (err as { code?: string }).code ?? "internal_error",
+    });
+  });
 
   return app;
 }

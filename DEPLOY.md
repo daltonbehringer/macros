@@ -291,6 +291,63 @@ Vercel Web Analytics is cookie-free. No PII is sent: events carry only their nam
 
 ---
 
+## 4d. Sentry error tracking
+
+Both apps wire Sentry for runtime error visibility. Errors only — no performance/tracing/replay (free tier 5k errors/month is plenty for MVP; tracing has its own much-smaller quota that runs out fast). PII is scrubbed via `beforeSend` on both SDKs (request bodies, cookies, auth headers, URL tokens). User context is at most an anonymous id — never email.
+
+### One-time setup (Sentry dashboard)
+
+1. **Create two projects** in your Sentry org:
+   - `macros-web` — platform: **Next.js**
+   - `macros-api` — platform: **Node.js**
+2. Copy each project's **DSN** (Project Settings → Client Keys (DSN)).
+3. **Settings → Auth Tokens → Create New Token**. Scopes needed: `project:releases`, `project:write`. Save the token value — used by Vercel to upload source maps on every build.
+4. Note your **org slug** (URL: `sentry.io/organizations/<slug>/...`) and project slugs (`macros-web`, `macros-api`).
+
+### Env vars
+
+Dev + prod can share Sentry projects (recommended for MVP — events are tagged with `environment`, filter in the UI). Split later if signal-to-noise gets noisy.
+
+**Vercel** (project → Settings → Environment Variables, both Production + Preview):
+
+| Variable | Value |
+|---|---|
+| `NEXT_PUBLIC_SENTRY_DSN` | DSN from `macros-web` |
+| `SENTRY_DSN` | DSN from `macros-web` (same value; used by SSR) |
+| `SENTRY_ENV` | `production` (Production scope) / `preview` (Preview scope) |
+| `SENTRY_AUTH_TOKEN` | from step 3 above (Production + Preview both) |
+| `SENTRY_ORG` | your org slug |
+| `SENTRY_PROJECT` | `macros-web` |
+
+**Railway** (both `dev` + `prod` envs):
+
+| Variable | Value |
+|---|---|
+| `SENTRY_DSN` | DSN from `macros-api` |
+| `SENTRY_ENV` | `production` (prod env) / `dev` (dev env) |
+
+### Verifying
+
+1. After deploy, trigger a server error: hit `https://dev.macros.dalty.io/api/__sentry_test` (returns 404 today — substitute any throwing path or temporarily add a route that throws).
+2. Trigger a client error: in browser console on the deployed site, run `setTimeout(() => { throw new Error('sentry test') }, 0)`.
+3. Both should appear in Sentry within ~30 sec, tagged with the right environment.
+
+### What's scrubbed
+
+- Request bodies (chat messages live here; would otherwise leak)
+- `Cookie` + `Authorization` headers
+- URL query params: `token`, `stytch_token_type` (Stytch magic-link callback)
+- `event.user.email` (defensive — we don't set it, but if a future helper does, it's stripped)
+
+### What's intentionally NOT done
+
+- **Session replay** (paid)
+- **Performance/tracing** — separate, smaller quota; not worth it pre-launch
+- **Release tagging via git SHA** — could add `SENTRY_RELEASE` later for "this error appeared in commit X" filtering
+- **Source maps for the API** — `tsx` runs TypeScript directly, no build step, no maps to upload. Stack traces show TS line numbers natively, which is fine
+
+---
+
 ## 5. Migration policy
 
 | | Trigger | Mechanism |

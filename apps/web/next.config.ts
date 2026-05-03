@@ -1,3 +1,4 @@
+import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
 /**
@@ -22,4 +23,19 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// withSentryConfig wraps Next's config to (a) auto-instrument the build and
+// (b) upload source maps to Sentry on every prod build (gated on
+// SENTRY_AUTH_TOKEN — local builds without it skip the upload step).
+export default withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  sourcemaps: {
+    // Delete source maps from the public bundle after upload to Sentry, so
+    // they're not served to browsers.
+    deleteSourcemapsAfterUpload: true,
+  },
+  // Don't fail the build if Sentry's network is unreachable.
+  silent: !process.env.CI,
+  disableLogger: true,
+});

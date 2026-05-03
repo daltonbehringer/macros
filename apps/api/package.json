@@ -17,6 +17,7 @@
     "@fastify/cors": "^10.0.1",
     "@macros/db": "workspace:*",
     "@macros/shared": "workspace:*",
+    "@sentry/node": "^10.51.0",
     "dotenv": "^16.4.5",
     "drizzle-orm": "^0.36.4",
     "fastify": "^5.1.0",

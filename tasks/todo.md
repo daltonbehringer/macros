@@ -183,6 +183,40 @@ Sunday morning. Average daily kcal, total workouts, days on/off target, simplest
 
 ## Review section
 
+### PR 18 — Sentry error tracking (2026-05-02)
+
+**What landed.** Runtime error visibility on both apps. Sentry SDKs initialized with strict PII scrubbing (request bodies, cookies, auth headers, URL tokens). Errors only — no performance/tracing/replay. Free tier 5k/month is enough for an MVP.
+
+- **`apps/web` (Next.js)**: `@sentry/nextjs@^10.51`. Five files added:
+  - [`apps/web/sentry.client.config.ts`](apps/web/sentry.client.config.ts) — browser SDK init, `beforeSend` + `beforeBreadcrumb` scrubbing
+  - [`apps/web/sentry.server.config.ts`](apps/web/sentry.server.config.ts) — SSR SDK init
+  - [`apps/web/sentry.edge.config.ts`](apps/web/sentry.edge.config.ts) — Edge runtime init (covers layout's cookie read)
+  - [`apps/web/instrumentation.ts`](apps/web/instrumentation.ts) — Next.js convention; `register()` loads server/edge config based on runtime; `onRequestError = Sentry.captureRequestError` forwards App Router thrown errors
+  - [`apps/web/next.config.ts`](apps/web/next.config.ts) — wrapped with `withSentryConfig()`. Source-map upload to Sentry on every prod build (gated on `SENTRY_AUTH_TOKEN` — local builds without it skip the upload step). `sourcemaps.deleteSourcemapsAfterUpload: true` keeps the maps off the public bundle.
+- **`apps/api` (Fastify)**: `@sentry/node@^10.51`. Three changes:
+  - [`apps/api/src/sentry.ts`](apps/api/src/sentry.ts) — `initSentry()` with the same PII-scrubbing `beforeSend` + `beforeBreadcrumb`. No-ops cleanly when `SENTRY_DSN` is empty.
+  - [`apps/api/src/index.ts`](apps/api/src/index.ts) — `import { initSentry } from "./sentry"; initSentry();` as the **very first** lines. Sentry's auto-instrumentation hooks Node's module system at init time; reordering these breaks instrumentation silently.
+  - [`apps/api/src/server.ts`](apps/api/src/server.ts) — `setErrorHandler` hook. Captures 5xx exceptions via `Sentry.withScope`, attaches the user id (if present) for correlation, never the email. 4xx are skipped — those are expected user errors, not bugs.
+- **PII scrubbing** (both SDKs): `event.request.data` (chat messages live here), `event.request.cookies`, `Cookie` + `Authorization` headers, `event.user.email`, and `token` / `stytch_token_type` query params on URLs.
+- [`apps/api/.env.example`](apps/api/.env.example) + [`apps/web/.env.example`](apps/web/.env.example) — added `SENTRY_DSN`, `SENTRY_ENV`, plus `NEXT_PUBLIC_SENTRY_DSN` and the build-time trio (`SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`) on the web side.
+- [`DEPLOY.md`](DEPLOY.md) §4d — Sentry setup steps (create two projects, copy DSNs, generate auth token), per-env variable matrix on Vercel + Railway, what's scrubbed, what's intentionally not done.
+- [`package.json`](package.json) — added `pnpm.peerDependencyRules.allowAny: ["@opentelemetry/api"]` to dedupe drizzle-orm. Without it, Sentry's transitive `@opentelemetry/api` triggered a peer-variant split, creating two incompatible drizzle-orm copies. (Captured as a lesson in [`tasks/lessons.md`](tasks/lessons.md).)
+
+**Verified.**
+- `pnpm typecheck` clean across 4 packages.
+- Local API + web both return 200 (`/healthz`, `/`) with empty DSNs — SDKs no-op as designed.
+- No new local boot warnings, no Sentry-related errors in dev console.
+
+**Watch.**
+- **Init order in api/index.ts is load-bearing**: `initSentry()` MUST run before any other import. Sentry's instrumentation hooks `require()` and won't catch modules already loaded. If a future refactor moves the env import or schema import above the Sentry call, instrumentation breaks silently.
+- **Source maps for the api are intentionally NOT uploaded**. `tsx` runs TypeScript directly, no build step, no maps to upload. Stack traces in Sentry will show TS line numbers natively — fine for our case. If we ever switch to a built `dist/`, add `@sentry/node` source-map upload via the CLI.
+- **5xx-only capture in the Fastify error hook**: 4xx (validation, auth) are user-actionable signals, not bugs — capturing them would burn quota on noise. If a 4xx ever masks a real bug (e.g., a malformed validation schema), it'll silently 400 without a Sentry event. Acceptable trade.
+- **`SENTRY_AUTH_TOKEN` on Vercel** is a *build-time* secret. If it ever leaks into a client bundle (e.g., via `NEXT_PUBLIC_*` prefix typo), it would let anyone upload source maps to your Sentry project. Don't prefix it.
+- **Dev + prod can share Sentry projects** (recommended interim — events are tagged with `environment`, filter in the UI). Splitting later is just creating new projects + swapping the env vars on prod. Until traffic separates dev noise from prod signal, share.
+- **The `peerDependencyRules` block in `package.json`** is now load-bearing. If you ever delete it, Sentry's transitive `@opentelemetry/api` will re-split drizzle-orm and `pnpm typecheck` will fail with cryptic "PgColumn is not assignable to Aliased" errors. The lesson in `tasks/lessons.md` documents the full diagnosis.
+- **No release tagging by git SHA** (`SENTRY_RELEASE`). Could add later for "this error first appeared in commit X" filtering in Sentry. Defer until needed.
+- **No alert routing in code** — set up Slack/email digests directly in Sentry's UI (Settings → Alerts).
+
 ### PR 17 — Per-user daily chat quota (2026-05-02)
 
 **What landed.** Server-enforced cap of 30 user-role chat messages per local day per user, surfaced subtly in both chat UIs. Protects against runaway Anthropic spend before pricing exists.

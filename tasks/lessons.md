@@ -67,6 +67,28 @@ DATABASE_URL=$(railway variables --service Postgres --kv | grep '^DATABASE_PUBLI
 
 **How to apply**: the moment you alias a non-prod branch to a custom subdomain (`dev.example.com`, `staging.example.com`), check Deployment Protection. Same applies to any Vercel project where you intend to expose Preview deploys to real users or external services.
 
+## pnpm: optional peer deps split a package into incompatible variants
+
+**Symptom**: after adding `@sentry/node` to one app, `pnpm typecheck` fails with TypeScript errors like `Type 'PgColumn<…>' is not assignable to type 'Aliased<string>'` — the error message names two different paths for the same package (e.g. `drizzle-orm@0.36.4_@types+pg@…` and `drizzle-orm@0.36.4_@opentelemetry+api@1.9.1_@types+pg@…`).
+
+**Root cause**: pnpm creates separate symlink trees per peer-dep combination. When a new package introduces an *optional* peer that an existing dep cares about (here: `@opentelemetry/api`, an optional peer of `drizzle-orm`), pnpm splits that dep into two variants — one for consumers that have the peer, one for consumers that don't. TypeScript treats the two variants as different types because their declarations live in different paths.
+
+**Rule**: when adding a new dep that drags in an OpenTelemetry / instrumentation peer (Sentry, Honeycomb, Datadog, etc.), check `pnpm typecheck` immediately. If it splits, add a `peerDependencyRules.allowAny` entry in the root `package.json`'s `pnpm` block:
+
+```json
+"pnpm": {
+  "peerDependencyRules": {
+    "allowAny": ["@opentelemetry/api"]
+  }
+}
+```
+
+Then `pnpm install --force` to re-resolve. The rule tells pnpm to satisfy the optional peer with whatever's already there instead of creating a new variant.
+
+**Reference fix**: [`package.json`](../package.json) — `pnpm.peerDependencyRules.allowAny`.
+
+**How to apply**: any monorepo using pnpm. The same pattern applies whenever a new package introduces a peer that other packages declare as optional. Generic test: after adding the new dep, search `node_modules/.pnpm` for two entries of the same package at the same version with different peer suffixes — that's the signal.
+
 ## Postgres custom GUCs — use `NULLIF(current_setting(name, true), '')`
 
 **Symptom**: RLS policy errors with `invalid input syntax for type uuid: ""` after the first request in a session.
